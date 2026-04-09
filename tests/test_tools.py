@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from friday.domain.models import ApprovalPolicy
+from friday.domain.models import ApprovalPolicy, WorkingMemory
 
 
 @dataclass
@@ -21,6 +21,7 @@ class FakeSettings:
 class FakeDeps:
     workspace_root: Path
     settings: FakeSettings = field(default_factory=FakeSettings)
+    memory: WorkingMemory = field(default_factory=WorkingMemory)
 
 
 def _make_ctx(workspace: Path) -> MagicMock:

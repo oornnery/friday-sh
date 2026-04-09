@@ -21,6 +21,8 @@ class TurnStats:
     cost_usd: float = 0.0
     cost_known: bool = True
     run_count: int = 0
+    _last_usage_ref: RunUsage | None = None
+    _last_usage_snapshot: RunUsage = field(default_factory=RunUsage)
 
     def reset(self) -> None:
         """Clear all stats before a new top-level run starts."""
@@ -29,6 +31,8 @@ class TurnStats:
         self.cost_usd = 0.0
         self.cost_known = True
         self.run_count = 0
+        self._last_usage_ref = None
+        self._last_usage_snapshot = RunUsage()
 
 
 def record_turn_result(stats: TurnStats, result: Any, requested_model: str = '') -> None:
@@ -37,7 +41,13 @@ def record_turn_result(stats: TurnStats, result: Any, requested_model: str = '')
 
     usage = getattr(result, 'usage', None)
     if callable(usage):
-        stats.usage = stats.usage + usage()
+        current_usage = usage()
+        if current_usage is stats._last_usage_ref:
+            stats.usage.incr(_usage_delta(current_usage, stats._last_usage_snapshot))
+        else:
+            stats.usage.incr(current_usage)
+        stats._last_usage_ref = current_usage
+        stats._last_usage_snapshot = _copy_usage(current_usage)
 
     model = _extract_model_label(result, requested_model)
     if model and model not in stats.models:
@@ -146,3 +156,39 @@ def _get_response(result: Any) -> Any | None:
         return result.response
     except Exception:
         return None
+
+
+def _copy_usage(usage: RunUsage) -> RunUsage:
+    return RunUsage(
+        requests=usage.requests,
+        tool_calls=usage.tool_calls,
+        input_tokens=usage.input_tokens,
+        cache_write_tokens=usage.cache_write_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        input_audio_tokens=usage.input_audio_tokens,
+        cache_audio_read_tokens=usage.cache_audio_read_tokens,
+        output_tokens=usage.output_tokens,
+        details=dict(usage.details),
+    )
+
+
+def _usage_delta(current: RunUsage, previous: RunUsage) -> RunUsage:
+    details = {
+        key: max(value - previous.details.get(key, 0), 0)
+        for key, value in current.details.items()
+        if value - previous.details.get(key, 0) > 0
+    }
+    return RunUsage(
+        requests=max(current.requests - previous.requests, 0),
+        tool_calls=max(current.tool_calls - previous.tool_calls, 0),
+        input_tokens=max(current.input_tokens - previous.input_tokens, 0),
+        cache_write_tokens=max(current.cache_write_tokens - previous.cache_write_tokens, 0),
+        cache_read_tokens=max(current.cache_read_tokens - previous.cache_read_tokens, 0),
+        input_audio_tokens=max(current.input_audio_tokens - previous.input_audio_tokens, 0),
+        cache_audio_read_tokens=max(
+            current.cache_audio_read_tokens - previous.cache_audio_read_tokens,
+            0,
+        ),
+        output_tokens=max(current.output_tokens - previous.output_tokens, 0),
+        details=details,
+    )

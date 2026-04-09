@@ -15,9 +15,11 @@ COLORS = {
     'error': '#ff5555',
     'muted': '#666666',
     'text': '#cccccc',
+    'bg_response': '#101822',
     'bg_selected': '#1e1e2e',
     'bg_completion': '#1a1a2a',
     'border': '#3a3a4a',
+    'response_border': '#2d5678',
 }
 
 # ── Rich theme (console output, panels, markdown) ─────────────
@@ -30,6 +32,8 @@ RICH_THEME = RichTheme(
         'error': f'bold {COLORS["error"]}',
         'muted': COLORS['muted'],
         'accent': f'bold {COLORS["primary"]}',
+        'response': f'{COLORS["text"]} on {COLORS["bg_response"]}',
+        'response.border': COLORS['response_border'],
     }
 )
 
@@ -63,15 +67,16 @@ PT_STYLE = PTStyle.from_dict(
 )
 
 
-def make_prompt_message(mode: str, model: str) -> FormattedText:
+def make_prompt_message(mode: str, model: str, *, debug_enabled: bool = False) -> FormattedText:
     """Build the styled REPL prompt fragments."""
     short_model = model.split(':')[-1] if ':' in model else model
-    return FormattedText(
-        [
-            ('class:prompt', 'friday'),
-            ('class:prompt-sep', ':'),
-            ('class:prompt-mode', mode),
-            ('class:prompt-sep', f'({short_model})'),
-            ('class:prompt', '> '),
-        ]
-    )
+    parts: list[tuple[str, str]] = [
+        ('class:prompt', 'friday'),
+        ('class:prompt-sep', ':'),
+        ('class:prompt-mode', mode),
+        ('class:prompt-sep', f'({short_model})'),
+    ]
+    if debug_enabled:
+        parts.append(('class:search', '[debug]'))
+    parts.append(('class:prompt', '> '))
+    return FormattedText(parts)

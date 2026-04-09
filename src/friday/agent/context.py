@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-ANCHOR_FILES = ('CLAUDE.md', 'README.md', 'pyproject.toml', 'package.json')
+ANCHOR_FILES = ('AGENTS.md', 'CLAUDE.md', 'README.md', 'pyproject.toml', 'package.json')
 DOC_SNIPPET_LIMIT = 1200
 
 
@@ -83,4 +83,16 @@ class WorkspaceContext:
             parts.append(f'shell: {env}')
         if docs:
             parts.append(f'project_docs:\n{docs}')
+        return '\n'.join(parts)
+
+    def render_summary(self) -> str:
+        """Compact workspace summary for routing turns and small-talk requests."""
+        parts = [
+            f'cwd: {self.cwd}',
+            f'repo_root: {self.repo_root}',
+            f'branch: {self.branch}',
+        ]
+        if self.shell_env:
+            env = ', '.join(f'{k}={v}' for k, v in self.shell_env.items())
+            parts.append(f'shell: {env}')
         return '\n'.join(parts)

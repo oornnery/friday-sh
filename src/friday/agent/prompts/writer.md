@@ -9,6 +9,9 @@ tools:
   - write_file
   - list_files
   - search
+  - search_memory
+  - save_memory
+  - list_memories
 max_steps: 20
 ---
 

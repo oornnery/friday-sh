@@ -61,24 +61,24 @@ bindkey '^F' __friday_ask_widget
 
 # ─── fzf integration ─────────────────────────────────────────────
 
-# Ctrl+G: Fuzzy search Friday session history
-__friday_fzf_history() {
+# Ctrl+G: Fuzzy pick a saved Friday session
+__friday_fzf_sessions() {
     if ! command -v fzf &>/dev/null; then
         zle -M "friday: fzf not installed"
         return
     fi
 
     local selected
-    selected=$(friday history 2>/dev/null | fzf --height=40% --reverse --prompt="friday history> ")
+    selected=$(friday sessions list --plain 2>/dev/null | fzf --height=40% --reverse --prompt="friday session> ")
 
     if [[ -n "$selected" ]]; then
-        BUFFER="$selected"
+        BUFFER="friday sessions set $selected"
         CURSOR=${#BUFFER}
     fi
     zle redisplay
 }
-zle -N __friday_fzf_history
-bindkey '^G' __friday_fzf_history
+zle -N __friday_fzf_sessions
+bindkey '^G' __friday_fzf_sessions
 
 # fzf model selector
 friday-select-model() {
@@ -86,15 +86,20 @@ friday-select-model() {
         echo "fzf not installed" >&2
         return 1
     fi
-    friday models | fzf --height=40% --reverse --prompt="model> "
+    friday models list | fzf --height=40% --reverse --prompt="model> "
 }
 
 # ─── Completions ──────────────────────────────────────────────────
 
 _friday_completions() {
-    local -a subcmds modes
-    subcmds=(ask chat config models)
-    modes=(code reader write debug)
+    local -a subcmds modes model_subcmds mode_subcmds session_subcmds settings_subcmds memory_subcmds
+    subcmds=(ask chat models modes sessions settings memories)
+    modes=(auto code reader write debug)
+    model_subcmds=(list set)
+    mode_subcmds=(list set)
+    session_subcmds=(list set delete new)
+    settings_subcmds=(list get)
+    memory_subcmds=(list search set get delete)
 
     case "$words[2]" in
         ask|chat)
@@ -103,8 +108,30 @@ _friday_completions() {
                 '--model[Model name]:model:' \
                 '*:question:'
             ;;
-        config)
-            _arguments '*:key:(default_model default_mode approval_policy max_steps session_dir)'
+        models)
+            _arguments \
+                '1:subcommand:(${model_subcmds})' \
+                '2:model or provider: '
+            ;;
+        modes)
+            _arguments \
+                '1:subcommand:(${mode_subcmds})' \
+                '2:mode:(${modes})'
+            ;;
+        sessions)
+            _arguments \
+                '1:subcommand:(${session_subcmds})' \
+                '2:session id: '
+            ;;
+        settings)
+            _arguments \
+                '1:subcommand:(${settings_subcmds})' \
+                '2:key:(default_model fallback_model zai_api_key zai_base_url default_mode approval_policy max_steps session_dir config_dir memory_db_path memory_top_k memory_auto_promote mcp_servers)'
+            ;;
+        memories)
+            _arguments \
+                '1:subcommand:(${memory_subcmds})' \
+                '2:value: '
             ;;
         *)
             _describe 'command' subcmds

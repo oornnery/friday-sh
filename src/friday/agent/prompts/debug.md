@@ -9,6 +9,9 @@ tools:
   - list_files
   - search
   - run_shell
+  - search_memory
+  - save_memory
+  - list_memories
 max_steps: 30
 ---
 

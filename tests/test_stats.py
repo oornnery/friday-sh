@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from pydantic_ai.usage import RunUsage
 
-from friday.agent.run_stats import TurnStats, format_turn_summary, record_turn_result
+from friday.agent.stats import TurnStats, format_turn_summary, record_turn_result
 
 
 class DummyResult:
@@ -91,3 +91,36 @@ def test_turn_summary_handles_multiple_models_and_known_cost() -> None:
     assert summary.startswith('models: openai:gpt-4.1, anthropic:claude-sonnet-4-20250514')
     assert 'tokens: 16 total, 13 in, 3 out' in summary
     assert 'cost: $0.004000' in summary
+
+
+def test_turn_summary_uses_delta_for_shared_run_usage() -> None:
+    stats = TurnStats()
+    shared_usage = RunUsage(input_tokens=4, output_tokens=1)
+
+    record_turn_result(
+        stats,
+        DummyResult(
+            shared_usage,
+            model_name='gpt-4.1',
+            provider_name='openai',
+        ),
+        'openai:gpt-4.1',
+    )
+
+    shared_usage.input_tokens = 9
+    shared_usage.output_tokens = 3
+    shared_usage.requests = 2
+
+    record_turn_result(
+        stats,
+        DummyResult(
+            shared_usage,
+            model_name='gpt-4.1',
+            provider_name='openai',
+        ),
+        'openai:gpt-4.1',
+    )
+
+    summary = format_turn_summary(stats)
+
+    assert 'tokens: 12 total, 9 in, 3 out' in summary

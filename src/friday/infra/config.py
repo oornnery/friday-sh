@@ -67,13 +67,18 @@ class FridaySettings(BaseSettings):
     zai_base_url: str = 'https://api.z.ai/api/coding/paas/v4'
 
     # Behavior
-    default_mode: AgentMode = AgentMode.CODE
+    default_mode: AgentMode = AgentMode.AUTO
     approval_policy: ApprovalPolicy = ApprovalPolicy.ASK
     max_steps: int = 25
 
     # Paths
     session_dir: Path = Path('~/.local/share/friday/sessions')
     config_dir: Path = Path('~/.config/friday')
+    memory_db_path: Path = Path('memory.db')
+
+    # Memory
+    memory_top_k: int = 6
+    memory_auto_promote: bool = True
 
     # MCP
     mcp_servers: list[MCPServerConfig] = Field(default_factory=list)
@@ -82,5 +87,9 @@ class FridaySettings(BaseSettings):
         """Expand ~ and ensure directories exist."""
         self.session_dir = self.session_dir.expanduser()
         self.config_dir = self.config_dir.expanduser()
+        self.memory_db_path = self.memory_db_path.expanduser()
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
+        if not self.memory_db_path.is_absolute():
+            self.memory_db_path = self.config_dir / self.memory_db_path
+        self.memory_db_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,5 +1,7 @@
 # Friday — LLM Shell Agent
 
+> Historical plan. This document describes the original v1 direction and no longer matches the current Friday v2 command surface or runtime.
+
 ## Context
 
 O projeto "friday" é um agente LLM que funciona como extensão ZSH. O objetivo é ter um assistente de shell inteligente que pode ver saída de comandos, recomendar soluções, codificar, e operar em diferentes modos. Atualmente o projeto é um esqueleto vazio (só `main.py` com hello world).
