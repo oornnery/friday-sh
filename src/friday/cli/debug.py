@@ -22,6 +22,7 @@ class _DebugState:
     root_level: int = logging.WARNING
     logger_levels: dict[str, int] = field(default_factory=dict)
 
+
 _STATE = _DebugState()
 
 

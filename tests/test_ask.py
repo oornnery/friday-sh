@@ -36,8 +36,7 @@ def test_run_ask_prints_summary_after_answer(monkeypatch, tmp_path: Path) -> Non
         ask_module,
         'format_turn_summary',
         lambda stats: (
-            'model: anthropic:claude-sonnet-4-20250514  '
-            'tokens: 17 total, 12 in, 5 out  cost: n/d'
+            'model: anthropic:claude-sonnet-4-20250514  tokens: 17 total, 12 in, 5 out  cost: n/d'
         ),
     )
     monkeypatch.setattr(ask_module, 'Status', lambda *args, **kwargs: nullcontext())

@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 from friday.agent.context import WorkspaceContext
 from friday.cli.ask import run_ask
-from friday.cli.catalog import LEGACY_COMMAND_SUGGESTIONS
 from friday.cli.chat import run_chat, run_chat_with_session
 from friday.cli.models import list_models
 from friday.cli.output import console, print_error, print_info
@@ -38,11 +37,11 @@ app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode='rich',
 )
-models_app = typer.Typer(help='List and select models', invoke_without_command=True)
-modes_app = typer.Typer(help='List and select modes', invoke_without_command=True)
-sessions_app = typer.Typer(help='List and manage saved sessions', invoke_without_command=True)
-settings_app = typer.Typer(help='Read effective configuration', invoke_without_command=True)
-memories_app = typer.Typer(help='Inspect and manage shared memory', invoke_without_command=True)
+model_app = typer.Typer(help='Select or show models', invoke_without_command=True)
+mode_app = typer.Typer(help='Select or show modes', invoke_without_command=True)
+session_app = typer.Typer(help='Manage saved sessions', invoke_without_command=True)
+setting_app = typer.Typer(help='Read or update settings', invoke_without_command=True)
+memory_app = typer.Typer(help='Inspect and manage shared memory', invoke_without_command=True)
 
 
 def _get_settings() -> FridaySettings:
@@ -55,13 +54,6 @@ def _parse_mode(value: str | None) -> AgentMode | None:
     if value is None:
         return None
     return AgentMode(value)
-
-
-def _legacy_command(name: str) -> None:
-    replacement = LEGACY_COMMAND_SUGGESTIONS[name]
-    print_error(f'`friday {name}` no longer exists.')
-    print_info(f'Use `friday {replacement}` instead.')
-    raise typer.Exit(1)
 
 
 def _memory_store(settings: FridaySettings) -> SQLiteMemoryStore:
@@ -105,7 +97,7 @@ def chat(
     run_chat(agent_mode, settings)
 
 
-@models_app.callback(invoke_without_command=True)
+@model_app.callback(invoke_without_command=True)
 def models_root(
     ctx: typer.Context,
     provider: Annotated[str | None, typer.Argument(help='Optional provider filter')] = None,
@@ -114,14 +106,14 @@ def models_root(
         list_models(_get_settings(), provider)
 
 
-@models_app.command('list')
+@model_app.command('show')
 def models_list(
     provider: Annotated[str | None, typer.Argument(help='Optional provider filter')] = None,
 ) -> None:
     list_models(_get_settings(), provider)
 
 
-@models_app.command('set')
+@model_app.command('set')
 def models_set(
     model: Annotated[str | None, typer.Argument(help='Model name to persist')] = None,
 ) -> None:
@@ -132,20 +124,20 @@ def models_set(
     set_default_model(settings, selected)
 
 
-@modes_app.callback(invoke_without_command=True)
+@mode_app.callback(invoke_without_command=True)
 def modes_root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         for mode in list_mode_names():
             console.print(mode)
 
 
-@modes_app.command('list')
+@mode_app.command('show')
 def modes_list() -> None:
     for mode in list_mode_names():
         console.print(mode)
 
 
-@modes_app.command('set')
+@mode_app.command('set')
 def modes_set(
     mode: Annotated[str | None, typer.Argument(help='Mode name to persist')] = None,
 ) -> None:
@@ -158,7 +150,7 @@ def modes_set(
     set_default_mode(settings, parsed_mode)
 
 
-@sessions_app.callback(invoke_without_command=True)
+@session_app.callback(invoke_without_command=True)
 def sessions_root(
     ctx: typer.Context,
     plain: Annotated[bool, typer.Option('--plain', help='Print IDs only')] = False,
@@ -167,15 +159,15 @@ def sessions_root(
         _sessions_list(plain=plain)
 
 
-@sessions_app.command('list')
+@session_app.command('show')
 def sessions_list(
     plain: Annotated[bool, typer.Option('--plain', help='Print IDs only')] = False,
 ) -> None:
     _sessions_list(plain=plain)
 
 
-@sessions_app.command('set')
-def sessions_set(
+@session_app.command('resume')
+def sessions_resume(
     session_id: Annotated[str | None, typer.Argument(help='Session ID')] = None,
 ) -> None:
     settings = _get_settings()
@@ -186,7 +178,7 @@ def sessions_set(
     run_chat_with_session(selected, settings)
 
 
-@sessions_app.command('delete')
+@session_app.command('delete')
 def sessions_delete(
     session_id: Annotated[str | None, typer.Argument(help='Session ID')] = None,
 ) -> None:
@@ -202,24 +194,24 @@ def sessions_delete(
     raise typer.Exit(1)
 
 
-@sessions_app.command('new')
+@session_app.command('new')
 def sessions_new() -> None:
     settings = _get_settings()
     run_chat(settings.default_mode, settings)
 
 
-@settings_app.callback(invoke_without_command=True)
+@setting_app.callback(invoke_without_command=True)
 def settings_root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         _settings_list()
 
 
-@settings_app.command('list')
+@setting_app.command('show')
 def settings_list() -> None:
     _settings_list()
 
 
-@settings_app.command('get')
+@setting_app.command('get')
 def settings_get(
     key: Annotated[str, typer.Argument(help='Config key to show')],
 ) -> None:
@@ -231,18 +223,18 @@ def settings_get(
     console.print(f'{key} = {value}')
 
 
-@memories_app.callback(invoke_without_command=True)
+@memory_app.callback(invoke_without_command=True)
 def memories_root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         _memories_list()
 
 
-@memories_app.command('list')
+@memory_app.command('show')
 def memories_list() -> None:
     _memories_list()
 
 
-@memories_app.command('search')
+@memory_app.command('search')
 def memories_search(
     query: Annotated[str, typer.Argument(help='Search query')],
 ) -> None:
@@ -256,8 +248,8 @@ def memories_search(
     print_memory_search_results(results)
 
 
-@memories_app.command('set')
-def memories_set(
+@memory_app.command('add')
+def memories_add(
     text: Annotated[str, typer.Argument(help='Memory text to save')],
 ) -> None:
     settings = _get_settings()
@@ -273,7 +265,7 @@ def memories_set(
     print_info(f'{action} memory {record.id}')
 
 
-@memories_app.command('get')
+@memory_app.command('get')
 def memories_get(
     memory_id: Annotated[str | None, typer.Argument(help='Memory ID')] = None,
 ) -> None:
@@ -293,7 +285,7 @@ def memories_get(
     console.print(f'text = {record.text}')
 
 
-@memories_app.command('delete')
+@memory_app.command('delete')
 def memories_delete(
     memory_id: Annotated[str | None, typer.Argument(help='Memory ID')] = None,
 ) -> None:
@@ -307,26 +299,6 @@ def memories_delete(
         return
     print_error(f'Memory not found: {selected}')
     raise typer.Exit(1)
-
-
-@app.command(hidden=True)
-def session() -> None:
-    _legacy_command('session')
-
-
-@app.command(hidden=True)
-def model() -> None:
-    _legacy_command('model')
-
-
-@app.command(hidden=True)
-def mode() -> None:
-    _legacy_command('mode')
-
-
-@app.command(hidden=True)
-def config() -> None:
-    _legacy_command('config')
 
 
 def _sessions_list(*, plain: bool) -> None:
@@ -353,11 +325,11 @@ def _memories_list() -> None:
     print_memory_table(store.list_memories(workspace_key=_workspace_key(), limit=20))
 
 
-app.add_typer(models_app, name='models')
-app.add_typer(modes_app, name='modes')
-app.add_typer(sessions_app, name='sessions')
-app.add_typer(settings_app, name='settings')
-app.add_typer(memories_app, name='memories')
+app.add_typer(model_app, name='model')
+app.add_typer(mode_app, name='mode')
+app.add_typer(session_app, name='session')
+app.add_typer(setting_app, name='setting')
+app.add_typer(memory_app, name='memory')
 
 
 def main() -> None:

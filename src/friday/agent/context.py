@@ -7,6 +7,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from friday.domain.permissions import sanitize_for_prompt
+
 ANCHOR_FILES = ('AGENTS.md', 'CLAUDE.md', 'README.md', 'pyproject.toml', 'package.json')
 DOC_SNIPPET_LIMIT = 1200
 
@@ -51,12 +53,14 @@ class WorkspaceContext:
                 text = path.read_text(encoding='utf-8', errors='replace')
                 docs[name] = text[:DOC_SNIPPET_LIMIT]
 
-        # Shell state from ZSH plugin hooks
+        # Shell state from ZSH plugin hooks — sanitized to avoid leaking secrets
         shell_env: dict[str, str] = {}
-        for key in ('FRIDAY_LAST_EXIT', 'FRIDAY_LAST_CMD'):
-            val = os.environ.get(key)
-            if val:
-                shell_env[key] = val
+        last_exit = os.environ.get('FRIDAY_LAST_EXIT')
+        if last_exit:
+            shell_env['FRIDAY_LAST_EXIT'] = last_exit[:10]
+        last_cmd = os.environ.get('FRIDAY_LAST_CMD')
+        if last_cmd:
+            shell_env['FRIDAY_LAST_CMD'] = sanitize_for_prompt(last_cmd, limit=200)
 
         return cls(
             cwd=cwd,

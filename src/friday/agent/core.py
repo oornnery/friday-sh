@@ -30,12 +30,12 @@ from friday.agent.contracts import (
 )
 from friday.agent.deps import AgentDeps
 from friday.agent.history import build_history_processor
-from friday.agent.modes import MODE_CONFIGS, ModePromptConfig
-from friday.agent.shared_memory import (
+from friday.agent.memory import (
     load_relevant_shared_memory,
     record_completed_turn,
     sync_shared_memory_to_working_memory,
 )
+from friday.agent.modes import MODE_CONFIGS, ModePromptConfig
 from friday.agent.stats import record_turn_result
 from friday.cli.confirm import confirm_deferred_tool
 from friday.domain.models import AgentMode
@@ -557,12 +557,16 @@ def _resolve_deferred_requests(
             raise UserError(msg)
 
         if deps.settings.approval_policy == 'auto':
-            log.debug('approval auto-granted: tool=%s id=%s', call.tool_name, tool_call_id)
+            log.info(
+                'approval auto-granted: tool=%s args=%s',
+                call.tool_name,
+                clip(str(call.args), 120),
+            )
             approvals[tool_call_id] = True
             continue
 
         if deps.settings.approval_policy == 'never':
-            log.debug('approval denied by policy: tool=%s id=%s', call.tool_name, tool_call_id)
+            log.info('approval denied by policy: tool=%s', call.tool_name)
             approvals[tool_call_id] = ToolDenied(
                 message='Friday approval policy denied this tool call.',
             )
@@ -588,11 +592,11 @@ def _resolve_deferred_requests(
                 deps.after_approval()
 
         if approved:
-            log.debug('approval granted interactively: tool=%s id=%s', call.tool_name, tool_call_id)
+            log.info('approval granted: tool=%s', call.tool_name)
             approvals[tool_call_id] = True
             continue
 
-        log.debug('approval denied interactively: tool=%s id=%s', call.tool_name, tool_call_id)
+        log.info('approval denied: tool=%s', call.tool_name)
         approvals[tool_call_id] = ToolDenied(message='The user denied this tool call.')
 
     return DeferredToolResults(approvals=approvals, metadata=deferred.metadata)

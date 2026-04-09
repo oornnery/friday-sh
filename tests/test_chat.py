@@ -64,7 +64,7 @@ def test_models_set_updates_current_session_without_resetting_history(tmp_path: 
     state = _state()
 
     handled = chat_module._handle_slash(
-        '/models set mistral:mistral-large-latest',
+        '/model mistral:mistral-large-latest',
         state,
         settings,
         store,
@@ -81,7 +81,7 @@ def test_modes_set_updates_current_session_without_resetting_history(tmp_path: P
     store = JsonSessionStore(settings.session_dir)
     state = _state()
 
-    handled = chat_module._handle_slash('/modes set debug', state, settings, store)
+    handled = chat_module._handle_slash('/mode debug', state, settings, store)
 
     assert handled is True
     assert state.mode is AgentMode.DEBUG
@@ -107,7 +107,7 @@ def test_sessions_set_switches_current_session(tmp_path: Path) -> None:
     )
     state = _state()
 
-    handled = chat_module._handle_slash('/sessions set session-2', state, settings, store)
+    handled = chat_module._handle_slash('/session resume session-2', state, settings, store)
 
     assert handled is True
     assert state.session_meta.id == 'session-2'
@@ -136,7 +136,7 @@ def test_sessions_set_resets_working_memory_when_runtime_is_available(tmp_path: 
     deps = _deps(tmp_path, settings)
 
     handled = chat_module._handle_slash(
-        '/sessions set session-2',
+        '/session resume session-2',
         state,
         settings,
         store,
@@ -169,23 +169,14 @@ def test_clear_resets_working_memory(tmp_path: Path) -> None:
     assert deps.memory.decisions == []
 
 
-def test_legacy_slash_command_points_to_new_name(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
+def test_unknown_slash_command_returns_false(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     store = JsonSessionStore(settings.session_dir)
     state = _state()
-    errors: list[str] = []
-    info: list[str] = []
-    monkeypatch.setattr(chat_module, 'print_error', errors.append)
-    monkeypatch.setattr(chat_module, 'print_info', info.append)
 
-    handled = chat_module._handle_slash('/model', state, settings, store)
+    handled = chat_module._handle_slash('/nonexistent', state, settings, store)
 
-    assert handled is True
-    assert errors == ['`/model` no longer exists.']
-    assert info == ['Use `/models` instead.']
+    assert handled is False
 
 
 def test_debug_toggle_updates_chat_state(monkeypatch, tmp_path: Path) -> None:
@@ -207,7 +198,7 @@ def test_debug_toggle_updates_chat_state(monkeypatch, tmp_path: Path) -> None:
     assert toggled == [True]
 
 
-def test_debug_status_reports_current_state(monkeypatch, tmp_path: Path) -> None:
+def test_debug_show_reports_current_state(monkeypatch, tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     store = JsonSessionStore(settings.session_dir)
     state = _state()
@@ -215,7 +206,7 @@ def test_debug_status_reports_current_state(monkeypatch, tmp_path: Path) -> None
     info: list[str] = []
     monkeypatch.setattr(chat_module, 'print_info', info.append)
 
-    handled = chat_module._handle_slash('/debug status', state, settings, store)
+    handled = chat_module._handle_slash('/debug show', state, settings, store)
 
     assert handled is True
     assert info == ['Debug is on']

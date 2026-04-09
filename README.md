@@ -1,183 +1,281 @@
-# Friday
+# friday
 
-Friday is an LLM-powered shell agent for coding, debugging, reading code, and writing docs from the terminal.
+LLM-powered shell agent that lives in your ZSH terminal.
 
-It uses `pydantic-ai 1.78`, a unified runtime for `ask` and `chat`, structured agent replies, deferred tool approvals, bounded history, persisted sessions, and optional MCP toolsets.
+```text
+friday:auto(glm-5-turbo)> explain why this test is failing
+```
+
+Friday is a conversational AI assistant with coding, debugging, and
+documentation modes. It routes tasks to specialized sub-agents,
+remembers context across sessions, and integrates with your shell
+workflow via keybindings and completions.
 
 ## Quick Start
 
+### Install with uvx (no clone needed)
+
 ```bash
-uv sync
-cp .env.example .env
+uvx --from git+https://github.com/oornnery/friday friday chat
+```
 
-# one-shot
-friday ask "what does this project do?"
+### Install with uv tool (global)
 
-# repl
+```bash
+uv tool install git+https://github.com/oornnery/friday
 friday chat
+```
+
+### Install from source
+
+```bash
+git clone https://github.com/oornnery/friday.git
+cd friday
+uv sync --group dev --group test
+```
+
+### Set up API keys
+
+```bash
+cp .env.example .env
+# Edit .env with at least one provider key
+```
+
+```bash
+# Anthropic
+ANTHROPIC_API_KEY=
+
+# OpenAI
+OPENAI_API_KEY=
+
+# Mistral
+MISTRAL_API_KEY=
+
+# Z.AI (ZhipuAI / GLM)
+ZAI_API_KEY=
+ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
+```
+
+### ZSH plugin
+
+Source the plugin in your `.zshrc`:
+
+```bash
+source /path/to/friday/src/friday/shell/friday.plugin.zsh
+```
+
+Now use `f` from anywhere in your shell:
+
+```bash
+f "why did my last command fail?"
+f "how do I use find to delete tmp files?"
 ```
 
 ## Requirements
 
 - Python 3.13+
-- `uv`
-- At least one provider configured: Anthropic, OpenAI, Mistral, Z.AI, or Ollama
+- [uv](https://docs.astral.sh/uv/)
+- At least one LLM provider key (or local Ollama)
 
-## Install
+## Usage
 
-```bash
-git clone <repo-url> friday
-cd friday
-uv sync
-```
-
-To expose the CLI:
+### CLI
 
 ```bash
-uv tool install -e .
-```
+# Ask a single question (uses router agent by default)
+friday ask "explain this error"
 
-Or add the local venv to your path:
+# Pipe input
+cat error.log | friday ask "what went wrong?"
+git diff | friday ask "review this"
 
-```bash
-export PATH="$PWD/.venv/bin:$PATH"
-```
+# Force a specific mode
+friday ask --mode debug "why is pytest failing?"
+friday ask --mode reader "explain the router module"
 
-## Command Surface
+# Use a specific model
+friday ask --model mistral:codestral-latest "refactor this function"
 
-Friday v2 keeps verbs for interaction and uses plural resource commands everywhere else.
-
-### Ask
-
-```bash
-friday ask "review this project"
-friday ask --mode debug "why is this test failing?"
-friday ask --model openai:gpt-4.1 "summarize this repo"
-git diff | friday ask "review these changes"
-```
-
-### Chat
-
-```bash
+# Interactive chat
 friday chat
-friday chat --mode code
-friday chat --model mistral:devstral-latest
+friday chat --mode code --model zai:glm-5-turbo
 ```
 
-### Models
+### REPL
 
-```bash
-friday models
-friday models list
-friday models list openai
-friday models set anthropic:claude-sonnet-4-20250514
-```
-
-`friday models` defaults to `list`. `friday models set` opens an interactive picker when no model is provided and the terminal is interactive.
-
-### Modes
-
-```bash
-friday modes
-friday modes list
-friday modes set auto
-friday modes set debug
-```
-
-### Sessions
-
-```bash
-friday sessions
-friday sessions list
-friday sessions set <session-id>
-friday sessions delete <session-id>
-friday sessions new
-```
-
-### Memories
-
-```bash
-friday memories
-friday memories list
-friday memories search "Fabio"
-friday memories set "Show model, tokens, and cost at the end"
-friday memories get <memory-id>
-friday memories delete <memory-id>
-```
-
-### Settings
-
-```bash
-friday settings
-friday settings list
-friday settings get default_model
-```
-
-## REPL Commands
-
-The REPL uses the same grammar as the CLI:
-
-| Command | Description |
-| --- | --- |
-| `/help` | Show commands |
-| `/debug [on|off|status]` | Toggle verbose logging and full stack traces |
-| `/models [list]` | List models |
-| `/models set [model]` | Change the current chat model |
-| `/modes [list]` | List modes |
-| `/modes set [mode]` | Change the current chat mode |
-| `/sessions [list]` | List sessions |
-| `/sessions set [id]` | Switch to a saved session |
-| `/sessions new` | Start a new session |
-| `/sessions delete [id]` | Delete a saved session |
-| `/memories [list]` | List shared memories visible to the current repo |
-| `/memories search <query>` | Search shared memory and indexed chat snippets |
-| `/memories set <text>` | Save a pinned shared memory |
-| `/memories get [id]` | Show one shared memory |
-| `/memories delete [id]` | Delete one shared memory |
-| `/settings [list]` | Show effective settings for the current chat |
-| `/settings get <key>` | Show one setting |
-| `/clear` | Reset conversation and start a new session |
-| `/quit` | Exit |
-| `/exit` | Exit |
-
-Legacy names such as `/model`, `/mode`, `/session`, `friday config`, and `friday model` are intentionally rejected with a suggestion to use the new command.
-
-## Response Footer
-
-Every visible response ends with a compact footer:
+The chat REPL has a styled prompt showing mode and model:
 
 ```text
-model: anthropic:claude-sonnet-4-20250514  tokens: 123 total, 88 in, 35 out  cost: n/d
+friday:auto(glm-5-turbo)> hello
+friday:code(codestral-latest)> fix the failing test
+friday:debug(glm-5-turbo)[debug]> /mode show
 ```
 
-When the provider exposes billing metadata, `cost` is shown. Otherwise Friday prints `n/d`.
+Commands:
 
-## Configuration
+```text
+  /model       Interactive model picker (or /model show | /model <name>)
+  /mode        Interactive mode picker (or /mode show | /mode <name>)
+  /session     Resume session picker (or /session show | resume | new | delete)
+  /setting     Show settings (or /setting <key> | /setting <key>=<value>)
+  /memory      List memories (or /memory show | search | add | delete)
+  /debug       Toggle debug (or /debug on | off | show)
+  /clear       Clear conversation
+  /quit        Exit Friday
+```
 
-Friday reads configuration in this order:
+Type `@` to trigger file completion, `/` for command completion.
 
-1. `FRIDAY_*` environment variables
-2. `.env`
-3. `~/.config/friday/config.toml` or `friday.toml`
+The `/model` and `/mode` pickers support **search** -- type to filter:
 
-### Example `.env`
+```text
+  Select model  (3/87)
+  / glm
+    zai:glm-4.5
+  > zai:glm-5-turbo  (active)
+    zai:glm-5.1
+```
+
+### ZSH Keybindings
+
+| Key | Action |
+| --- | --- |
+| `f "question"` | Ask Friday from anywhere |
+| `Ctrl+F` | Ask about current buffer / last command |
+| `Ctrl+G` | Fuzzy session picker (requires fzf) |
+| `friday-select-model` | Interactive model picker with fzf |
+
+### Resource Commands (CLI)
 
 ```bash
-ANTHROPIC_API_KEY=...
-OPENAI_API_KEY=...
-MISTRAL_API_KEY=...
-ZAI_API_KEY=...
-ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
+friday model show                 # List all models from providers
+friday model set                  # Interactive picker
+friday mode show                  # List modes
+friday session show               # List saved sessions
+friday session resume <id>        # Resume session
+friday setting show               # Show all settings
+friday memory show                # List shared memories
+friday memory add "user prefers concise answers"
+friday memory search "preferences"
 ```
 
-### Example `config.toml`
+## Architecture
+
+```text
+                          +-------------------+
+                          |     ZSH Shell     |
+                          |  f "question"     |
+                          |  Ctrl+F / Ctrl+G  |
+                          +---------+---------+
+                                    |
+                          +---------v---------+
+                          |    friday CLI     |
+                          |  ask | chat       |
+                          +---------+---------+
+                                    |
+                    +---------------v---------------+
+                    |        Router Agent            |
+                    |   (auto mode -- conversational)|
+                    +--+--------+--------+--------+-+
+                       |        |        |        |
+              +--------v--+ +---v----+ +-v------+ +--v-------+
+              | Code Agent| | Reader | | Writer | |  Debug   |
+              | read,write| | read   | | read,  | | read,    |
+              | patch,    | | list,  | | write, | | list,    |
+              | shell,    | | search | | list,  | | search,  |
+              | search    | |        | | search | | shell    |
+              +-----------+ +--------+ +--------+ +----------+
+                       |        |        |        |
+                    +--v--------v--------v--------v--+
+                    |         Tool Layer              |
+                    |  filesystem | shell | memory    |
+                    +---------------+----------------+
+                                    |
+                    +---------------v---------------+
+                    |        Infrastructure          |
+                    | config | sessions | memory.db  |
+                    | MCP servers | model providers  |
+                    +-------------------------------+
+```
+
+### Agent Modes
+
+| Mode | Purpose | Tools |
+| --- | --- | --- |
+| **auto** | Routes to the right specialist | delegation only |
+| **code** | Write, edit, test code | read, write, patch, list, search, shell |
+| **reader** | Analyze and explain code | read, list, search |
+| **write** | Generate docs and text | read, write, list, search |
+| **debug** | Diagnose errors and bugs | read, list, search, shell |
+
+Each mode is defined in `src/friday/agent/prompts/<mode>.md` with YAML
+frontmatter specifying tools, max steps, model override, and thinking.
+
+### Approval System
+
+Risky tools (`write_file`, `patch_file`, `run_shell`) require user
+confirmation before executing:
+
+```text
+  +-- Confirm ----------------------+
+  | run_shell: Execute shell command |
+  |                                  |
+  | rm -rf node_modules && npm i     |
+  +----------------------------------+
+  Allow? [y/N]
+```
+
+Configurable via `approval_policy`:
+
+- **ask** (default) -- prompt for each risky action
+- **auto** -- execute without asking
+- **never** -- always deny
+
+### Memory System
+
+Friday has three layers of memory:
+
+```text
+  +---------------------------+
+  | Shared Memory (SQLite)    |  <-- cross-session, searchable
+  | profile, preferences,     |      agent saves via save_memory
+  | notes, decisions          |
+  +---------------------------+
+  | Working Memory            |  <-- per-session, short-term
+  | task, files, notes,       |      auto-managed by harness
+  | entities, decisions       |
+  +---------------------------+
+  | Message History           |  <-- per-session transcript
+  | pydantic-ai messages      |      trimmed by history processor
+  +---------------------------+
+```
+
+The agent decides what to save to shared memory via the `save_memory`
+tool. The harness indexes chat turns for cross-session search.
+
+### Supported Providers
+
+| Prefix | Provider | Auth |
+| --- | --- | --- |
+| `anthropic:` | Anthropic (Claude) | `ANTHROPIC_API_KEY` |
+| `openai:` | OpenAI (GPT) | `OPENAI_API_KEY` |
+| `mistral:` | Mistral AI | `MISTRAL_API_KEY` |
+| `zai:` | Z.AI (GLM) | `ZAI_API_KEY` |
+| `ollama:` | Ollama (local) | no key needed |
+
+Model fallback: if the default model fails (missing key), Friday
+automatically tries `fallback_model` from config.
+
+### MCP Integration
+
+Friday supports [Model Context Protocol](https://modelcontextprotocol.io/)
+servers. Configure in `~/.config/friday/config.toml`:
 
 ```toml
-default_model = "zai:glm-5-turbo"
-fallback_model = "mistral:devstral-latest"
-default_mode = "auto"
-approval_policy = "ask"
-max_steps = 25
+[[mcp_servers]]
+name = "github"
+transport = "http"
+url = "http://localhost:3000/mcp"
 
 [[mcp_servers]]
 name = "filesystem"
@@ -186,90 +284,114 @@ command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/user"]
 ```
 
-### Main Settings
+## Configuration
 
-| Setting | Default |
-| --- | --- |
-| `default_model` | `zai:glm-5-turbo` |
-| `fallback_model` | `mistral:devstral-latest` |
-| `default_mode` | `auto` |
-| `approval_policy` | `ask` |
-| `max_steps` | `25` |
-| `session_dir` | `~/.local/share/friday/sessions` |
-| `config_dir` | `~/.config/friday` |
-| `memory_db_path` | `~/.config/friday/memory.db` |
-| `memory_top_k` | `6` |
-| `memory_auto_promote` | `true` |
+Friday reads config from (in priority order):
 
-## Agent Runtime
+1. Environment variables (`FRIDAY_*` prefix)
+2. `.env` file
+3. `~/.config/friday/config.toml` or `friday.toml`
 
-Friday now has one runtime path for both CLI and REPL:
+### Settings
 
-- `AgentReply` is the internal structured final output
-- `TurnOutput = AgentReply | DeferredToolRequests`
-- `instructions` are rebuilt every run from mode prompts plus deterministic working memory
-- shared long-term memory lives in `SQLite + FTS5`, separate from session JSON
-- top-level turns can retrieve relevant snippets from explicit memories and older chats
-- `WorkingMemory` is reset on `/clear`, `/sessions new`, and `/sessions set`
-- `UsageLimits` are applied on every run
-- delegated subagents share `ctx.usage`
-- session history is reduced by user-turn boundary so tool call / tool return chains stay intact
+| Key | Default | Description |
+| --- | --- | --- |
+| `default_model` | `zai:glm-5-turbo` | Default LLM |
+| `fallback_model` | `mistral:devstral-latest` | Fallback if default fails |
+| `default_mode` | `auto` | Default agent mode |
+| `approval_policy` | `ask` | Risky tool confirmation |
+| `max_steps` | `25` | Max tool calls per turn |
+| `session_dir` | `~/.local/share/friday/sessions` | Session storage |
+| `config_dir` | `~/.config/friday` | Config directory |
+| `memory_db_path` | `memory.db` | SQLite memory database |
+| `memory_top_k` | `6` | Memory results per turn |
 
-### Modes
+Runtime override in chat: `/setting default_model=mistral:codestral-latest`
 
-| Mode | Purpose |
-| --- | --- |
-| `auto` | Router mode that can delegate to specialist agents |
-| `code` | Edit, refactor, and verify code |
-| `reader` | Read and explain code |
-| `write` | Generate docs and prose |
-| `debug` | Diagnose failures and runtime issues |
+## Project Structure
 
-Mode prompts live in `src/friday/agent/prompts/*.md` and are parsed through a validated `ModePromptConfig`.
-
-## Approvals
-
-Sensitive tool domains use deferred approvals:
-
-- `ask`: asks in the terminal and resumes the run
-- `auto`: approves automatically
-- `never`: denies automatically
-
-Friday uses `ApprovalRequiredToolset` for sensitive toolsets and converts decisions into `DeferredToolResults` before resuming the run.
-
-## MCP
-
-`mcp_servers` are wired directly into the agent as toolsets. Both `stdio` and `http` transports are supported.
-
-Each configured server gets a stable `id` and `tool_prefix` based on its configured name, which keeps MCP tools discoverable and avoids collisions.
-
-## Providers
-
-| Prefix | Provider |
-| --- | --- |
-| `anthropic:` | Anthropic |
-| `openai:` | OpenAI |
-| `mistral:` | Mistral |
-| `zai:` | Z.AI |
-| `ollama:` | Ollama |
-
-## ZSH Plugin
-
-Source `src/friday/shell/friday.plugin.zsh` from your `.zshrc`.
-
-It provides:
-
-- `f "question"` as shorthand for `friday ask`
-- `Ctrl+F` to ask about the current buffer or last command
-- `Ctrl+G` to fuzzy-pick a saved session and prepare `friday sessions set ...`
-- `friday-select-model` for `fzf`-based model selection
-- shell completions aligned with the v3 command surface
+```text
+src/friday/
+|-- __init__.py              # package version
+|-- __main__.py              # python -m friday
+|
+|-- agent/                   # core AI runtime
+|   |-- core.py              # agent factory, execution loop, approval flow
+|   |-- router.py            # delegation tools (delegate_code, etc.)
+|   |-- memory.py            # shared memory retrieval + chat indexing
+|   |-- context.py           # workspace snapshot (git, env, shell state)
+|   |-- contracts.py         # AgentReply, RouterDecision, TurnOutput
+|   |-- deps.py              # AgentDeps injected into tools
+|   |-- modes.py             # mode config loader (YAML frontmatter)
+|   |-- history.py           # history trimming (pair-safe, dedup)
+|   |-- stats.py             # token/cost tracking per turn
+|   `-- prompts/             # system prompts per mode
+|       |-- router.md        # auto mode -- conversational router
+|       |-- code.md          # code mode -- full access
+|       |-- reader.md        # reader mode -- read-only
+|       |-- writer.md        # writer mode -- docs generation
+|       `-- debug.md         # debug mode -- error diagnosis
+|
+|-- cli/                     # terminal interface
+|   |-- app.py               # typer entrypoint + all CLI commands
+|   |-- chat.py              # interactive REPL loop
+|   |-- ask.py               # single-shot ask
+|   |-- catalog.py           # command registry (REPL + CLI)
+|   |-- completer.py         # / commands + @ file completion
+|   |-- picker.py            # interactive list picker with search
+|   |-- confirm.py           # approval dialogs for risky tools
+|   |-- models.py            # dynamic model listing from providers
+|   |-- resources.py         # interactive pickers for model/mode/session
+|   |-- output.py            # rich console, markdown rendering
+|   |-- theme.py             # unified color palette
+|   `-- debug.py             # debug mode logging
+|
+|-- domain/                  # pure business logic (no IO)
+|   |-- models.py            # AgentMode, WorkingMemory, MemoryKind
+|   |-- validation.py        # input limits (path, command, content)
+|   `-- permissions.py       # safe_path, contains_secret, clip
+|
+|-- infra/                   # IO boundary
+|   |-- config.py            # FridaySettings (pydantic-settings)
+|   |-- sessions.py          # JSON session store
+|   |-- memory.py            # SQLite + FTS5 shared memory
+|   `-- mcp.py               # MCP server factory
+|
+|-- tools/                   # pydantic-ai tool implementations
+|   |-- filesystem.py        # read, write, patch, list, search
+|   |-- shell.py             # run_shell with validation
+|   |-- memory.py            # search_memory, save_memory, list_memories
+|   `-- registry.py          # tool metadata
+|
+`-- shell/
+    `-- friday.plugin.zsh    # ZSH integration (f, Ctrl+F, Ctrl+G)
+```
 
 ## Development
 
 ```bash
-uv sync
-./.venv/bin/ruff check src tests
-./.venv/bin/ty check --exclude 'tests/'
-./.venv/bin/pytest -q
+# Setup
+git clone https://github.com/oornnery/friday.git
+cd friday
+uv sync --group dev --group test
+
+# Run all checks (format + lint + typecheck + test)
+uv run task check
+
+# Individual tasks
+uv run task format      # ruff format
+uv run task lint        # ruff check --fix
+uv run task typecheck   # ty check
+uv run task test        # pytest -v
+
+# Run a single test
+uv run pytest tests/test_security.py::TestContainsSecret -v
+
+# Run friday locally
+uv run friday chat
+uv run friday ask "hello"
 ```
+
+## License
+
+MIT

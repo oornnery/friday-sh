@@ -99,10 +99,32 @@ def _query_terms(query: str) -> list[str]:
     return filtered[:8]
 
 
+_FTS5_OPERATORS = {'AND', 'OR', 'NOT', 'NEAR'}
+_MAX_QUERY_LENGTH = 500
+
+
+def _fts_escape_token(token: str) -> str:
+    """Escape a single token for safe use in FTS5 MATCH queries."""
+    # Strip FTS5 special chars: (), *, :, ^, +
+    cleaned = token.replace('"', '""')
+    for ch in ('(', ')', '*', ':', '^', '+'):
+        cleaned = cleaned.replace(ch, '')
+    return cleaned.strip()
+
+
 def _fts_query(query: str) -> str:
-    filtered = _query_terms(query)
-    escaped = [token.replace('"', '""') for token in filtered[:8]]
-    return ' OR '.join(f'"{token}"' for token in escaped)
+    """Build a safe FTS5 query from user input."""
+    truncated = query[:_MAX_QUERY_LENGTH]
+    filtered = _query_terms(truncated)
+    escaped = []
+    for token in filtered[:8]:
+        # Skip FTS5 operators that could alter query semantics
+        if token.upper() in _FTS5_OPERATORS:
+            continue
+        clean = _fts_escape_token(token)
+        if clean:
+            escaped.append(f'"{clean}"')
+    return ' OR '.join(escaped) if escaped else '""'
 
 
 def _recency_boost(timestamp: str) -> float:
@@ -508,7 +530,7 @@ class SQLiteMemoryStore:
 
     def _ensure_schema(self, conn: sqlite3.Connection) -> None:
         conn.executescript(
-            '''
+            """
             CREATE TABLE IF NOT EXISTS memory_records (
                 id TEXT PRIMARY KEY,
                 text TEXT NOT NULL,
@@ -543,7 +565,7 @@ class SQLiteMemoryStore:
 
             CREATE VIRTUAL TABLE IF NOT EXISTS chat_chunks_fts
             USING fts5(id UNINDEXED, text, tokenize = 'porter unicode61');
-            '''
+            """
         )
 
     def _sync_memory_fts(self, conn: sqlite3.Connection, record_id: str, text: str) -> None:

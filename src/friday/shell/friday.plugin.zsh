@@ -69,10 +69,10 @@ __friday_fzf_sessions() {
     fi
 
     local selected
-    selected=$(friday sessions list --plain 2>/dev/null | fzf --height=40% --reverse --prompt="friday session> ")
+    selected=$(friday session show --plain 2>/dev/null | fzf --height=40% --reverse --prompt="friday session> ")
 
     if [[ -n "$selected" ]]; then
-        BUFFER="friday sessions set $selected"
+        BUFFER="friday session resume $selected"
         CURSOR=${#BUFFER}
     fi
     zle redisplay
@@ -86,20 +86,15 @@ friday-select-model() {
         echo "fzf not installed" >&2
         return 1
     fi
-    friday models list | fzf --height=40% --reverse --prompt="model> "
+    friday model show | fzf --height=40% --reverse --prompt="model> "
 }
 
 # ─── Completions ──────────────────────────────────────────────────
 
 _friday_completions() {
-    local -a subcmds modes model_subcmds mode_subcmds session_subcmds settings_subcmds memory_subcmds
-    subcmds=(ask chat models modes sessions settings memories)
+    local -a subcmds modes
+    subcmds=(ask chat model mode session setting memory)
     modes=(auto code reader write debug)
-    model_subcmds=(list set)
-    mode_subcmds=(list set)
-    session_subcmds=(list set delete new)
-    settings_subcmds=(list get)
-    memory_subcmds=(list search set get delete)
 
     case "$words[2]" in
         ask|chat)
@@ -108,30 +103,30 @@ _friday_completions() {
                 '--model[Model name]:model:' \
                 '*:question:'
             ;;
-        models)
+        model)
             _arguments \
-                '1:subcommand:(${model_subcmds})' \
+                '1:subcommand:(show)' \
                 '2:model or provider: '
             ;;
-        modes)
+        mode)
             _arguments \
-                '1:subcommand:(${mode_subcmds})' \
+                '1:subcommand:(show)' \
                 '2:mode:(${modes})'
             ;;
-        sessions)
+        session)
             _arguments \
-                '1:subcommand:(${session_subcmds})' \
+                '1:subcommand:(show resume new delete)' \
                 '2:session id: '
             ;;
-        settings)
+        setting)
             _arguments \
-                '1:subcommand:(${settings_subcmds})' \
-                '2:key:(default_model fallback_model zai_api_key zai_base_url default_mode approval_policy max_steps session_dir config_dir memory_db_path memory_top_k memory_auto_promote mcp_servers)'
+                '1:subcommand:(show)' \
+                '2:key:(default_model fallback_model default_mode approval_policy max_steps)'
             ;;
-        memories)
+        memory)
             _arguments \
-                '1:subcommand:(${memory_subcmds})' \
-                '2:value: '
+                '1:subcommand:(show search add delete)' \
+                '2:query or id: '
             ;;
         *)
             _describe 'command' subcmds

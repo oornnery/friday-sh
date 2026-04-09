@@ -61,24 +61,24 @@ class FridayCompleter(Completer):
             items = {subcommand: '' for subcommand in subcommands}
             return self._matching_completions(items, current)
 
-        if command == '/modes' and parts[1] == 'set':
+        if command == '/mode' and len(parts) >= 2:
             items = {mode: '' for mode in list_mode_names()}
             return self._matching_completions(items, current)
 
-        if command == '/settings' and parts[1] == 'get':
+        if command == '/setting' and len(parts) >= 2:
             items = {name: '' for name in FridaySettings.model_fields}
             return self._matching_completions(items, current)
 
-        if command == '/sessions' and parts[1] in {'set', 'delete'}:
-            items = {session_id: 'saved session' for session_id in self._session_ids()}
+        if command == '/session' and parts[1] in {'resume', 'delete'}:
+            items = {sid: 'saved session' for sid in self._session_ids()}
             return self._matching_completions(items, current)
 
-        if command == '/memories' and parts[1] in {'get', 'delete'}:
-            items = {memory_id: 'shared memory' for memory_id in self._memory_ids()}
+        if command == '/memory' and parts[1] in {'delete'}:
+            items = {mid: 'shared memory' for mid in self._memory_ids()}
             return self._matching_completions(items, current)
 
         if command == '/debug':
-            items = {'on': '', 'off': '', 'status': ''}
+            items = {'on': '', 'off': '', 'show': ''}
             return self._matching_completions(items, current)
 
         return []

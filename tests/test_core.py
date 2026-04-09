@@ -17,8 +17,8 @@ from pydantic_ai.usage import RunUsage
 from friday.agent.contracts import AgentReply, RouterDecision, RouterDecisionAction
 from friday.agent.core import _prepare_turn, create_agent, execute_agent
 from friday.agent.deps import AgentDeps
+from friday.agent.memory import record_completed_turn
 from friday.agent.modes import MODE_CONFIGS
-from friday.agent.shared_memory import record_completed_turn
 from friday.domain.models import AgentMode, MemoryKind, MemoryScope
 from friday.infra.config import FridaySettings
 from friday.infra.memory import SQLiteMemoryStore
@@ -228,10 +228,16 @@ def test_execute_agent_auto_mode_direct_reply_still_saves_memory(
         )
     )
 
-    records = deps.memory_store.list_memories(workspace_key=tmp_path.as_posix(), limit=10)
-
     assert 'Fabio' in executed.reply.markdown
-    assert any(record.kind.value == 'profile' and 'Fabio' in record.text for record in records)
+    # Memory promotion is now the agent's job via save_memory tool, not regex.
+    # The harness only indexes the chat chunk for cross-chat search.
+    results = deps.memory_store.search(
+        'Fabio',
+        workspace_key=tmp_path.as_posix(),
+        current_session_id='other',
+        limit=5,
+    )
+    assert any('Fabio' in r.snippet for r in results)
 
 
 def test_execute_agent_auto_delegate_keeps_user_visible_history(
@@ -361,7 +367,7 @@ def test_prepare_turn_loads_relevant_shared_memory(tmp_path: Path) -> None:
     assert any('Fabio' in entity for entity in deps.memory.entities)
 
 
-def test_record_completed_turn_promotes_profile_memory(tmp_path: Path) -> None:
+def test_record_completed_turn_indexes_chat_chunk(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     deps = _deps(tmp_path, settings)
 
@@ -372,6 +378,11 @@ def test_record_completed_turn_promotes_profile_memory(tmp_path: Path) -> None:
         record_chat_chunk=True,
     )
 
-    records = deps.memory_store.list_memories(workspace_key=tmp_path.as_posix(), limit=10)
-    assert any(record.kind.value == 'profile' and 'Fabio' in record.text for record in records)
-    assert deps.memory.entities == ['user_name=Fabio']
+    # Chat chunk should be indexed for cross-chat search
+    results = deps.memory_store.search(
+        'Fabio',
+        workspace_key=tmp_path.as_posix(),
+        current_session_id='other-session',
+        limit=5,
+    )
+    assert any('Fabio' in r.snippet for r in results)

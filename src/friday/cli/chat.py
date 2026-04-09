@@ -7,9 +7,11 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
+from pydantic_ai import Agent
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 from rich.status import Status
@@ -18,7 +20,7 @@ from friday.agent.context import WorkspaceContext
 from friday.agent.core import create_agent, execute_agent
 from friday.agent.deps import AgentDeps
 from friday.agent.stats import format_turn_summary
-from friday.cli.catalog import LEGACY_COMMAND_SUGGESTIONS, REPL_COMMANDS
+from friday.cli.catalog import REPL_COMMANDS
 from friday.cli.completer import FridayCompleter
 from friday.cli.debug import format_debug_status, print_debug_traceback, set_debug_logging
 from friday.cli.models import list_models
@@ -36,7 +38,7 @@ from friday.cli.resources import (
 from friday.cli.theme import PT_STYLE, make_prompt_message
 from friday.domain.models import AgentMode, MemoryKind, MemoryScope
 from friday.infra.config import FridaySettings
-from friday.infra.memory import SharedMemorySnapshot, SQLiteMemoryStore
+from friday.infra.memory import MemoryStore, SharedMemorySnapshot, SQLiteMemoryStore
 from friday.infra.sessions import (
     JsonSessionStore,
     SessionData,
@@ -123,7 +125,7 @@ def _print_help() -> None:
 def _handle_debug(args: list[str], state: ChatState) -> bool:
     subcommand = args[0] if args else 'toggle'
 
-    if subcommand == 'status':
+    if subcommand == 'show':
         print_info(f'Debug is {format_debug_status(state.debug_enabled)}')
         return True
 
@@ -133,52 +135,58 @@ def _handle_debug(args: list[str], state: ChatState) -> bool:
         print_info(f'Debug is {format_debug_status(state.debug_enabled)}')
         return True
 
-    print_error(f'Unknown command: /debug {" ".join(args)}')
-    print_info('Usage: /debug [on|off|status]')
+    print_error(f'Unknown: /debug {" ".join(args)}')
+    print_info('Usage: /debug [on|off|show]')
     return True
 
 
 def _handle_models(args: list[str], state: ChatState, settings: FridaySettings) -> bool:
-    if not args or args[0] == 'list':
+    # /model show [provider] — list without interaction
+    if args and args[0] == 'show':
         provider = args[1] if len(args) > 1 else None
         list_models(settings, provider)
         return True
 
-    if args[0] == 'set':
-        selected = (
-            args[1]
-            if len(args) > 1
-            else interactive_model_pick(settings, current=state.model)
-        )
-        if not selected:
-            return True
+    # /model <name> — direct switch
+    if args:
+        state.model = args[0]
+        state.rebuild_agent = True
+        print_info(f'Switched to model: {args[0]}')
+        return True
+
+    # /model — interactive picker
+    selected = interactive_model_pick(settings, current=state.model)
+    if selected:
         state.model = selected
         state.rebuild_agent = True
         print_info(f'Switched to model: {selected}')
-        return True
-
-    print_error(f'Unknown command: /models {" ".join(args)}')
-    print_info('Usage: /models [list [provider]] | /models set [model]')
     return True
 
 
 def _handle_modes(args: list[str], state: ChatState) -> bool:
-    if not args or args[0] == 'list':
+    # /mode show — list without interaction
+    if args and args[0] == 'show':
         for mode in list_mode_names():
             console.print(mode)
         return True
 
-    if args[0] == 'set':
-        selected = args[1] if len(args) > 1 else interactive_mode_pick(current=state.mode.value)
-        if not selected:
-            return True
+    # /mode <name> — direct switch
+    if args:
+        try:
+            state.mode = AgentMode(args[0])
+            state.rebuild_agent = True
+            print_info(f'Switched to mode: {state.mode.value}')
+        except ValueError:
+            print_error(f'Unknown mode: {args[0]}')
+            print_info(f'Available: {", ".join(list_mode_names())}')
+        return True
+
+    # /mode — interactive picker
+    selected = interactive_mode_pick(current=state.mode.value)
+    if selected:
         state.mode = AgentMode(selected)
         state.rebuild_agent = True
         print_info(f'Switched to mode: {state.mode.value}')
-        return True
-
-    print_error(f'Unknown command: /modes {" ".join(args)}')
-    print_info('Usage: /modes [list] | /modes set [mode]')
     return True
 
 
@@ -188,13 +196,15 @@ def _handle_sessions(
     store: JsonSessionStore,
     deps: AgentDeps | None = None,
 ) -> bool:
-    subcommand = args[0] if args else 'list'
-    log.debug('sessions command: %s', subcommand)
+    subcommand = args[0] if args else ''
+    log.debug('session command: %s', subcommand)
 
-    if subcommand == 'list':
+    # /session show — list sessions table
+    if subcommand == 'show':
         print_session_table(store.list_sessions(limit=20), active_id=state.session_meta.id)
         return True
 
+    # /session new — fresh session
     if subcommand == 'new':
         state.message_history = []
         state.session_meta = _new_session_meta(state.model, state.mode)
@@ -204,33 +214,21 @@ def _handle_sessions(
         print_info(f'New session: {state.session_meta.id}')
         return True
 
-    if subcommand == 'set':
-        session_id = args[1] if len(args) > 1 else interactive_session_pick(
-            store,
-            current=state.session_meta.id,
+    # /session resume [id] — resume by id or picker
+    if subcommand == 'resume':
+        session_id = (
+            args[1]
+            if len(args) > 1
+            else interactive_session_pick(store, current=state.session_meta.id)
         )
-        if not session_id:
-            return True
-        try:
-            data = store.load(session_id)
-        except FileNotFoundError:
-            print_error(f'Session not found: {session_id}')
-            return True
+        return _resume_session(session_id, state, store, deps)
 
-        state.message_history = list(data.messages)
-        state.model = data.meta.model or state.model
-        state.mode = _parse_mode(data.meta.mode, state.mode)
-        state.session_meta = data.meta
-        state.rebuild_agent = True
-        if deps is not None:
-            _reset_repl_runtime_state(deps, state)
-        print_info(f'Switched to session {data.meta.id} ({data.meta.turn_count} turns)')
-        return True
-
+    # /session delete [id]
     if subcommand == 'delete':
-        session_id = args[1] if len(args) > 1 else interactive_session_pick(
-            store,
-            current=state.session_meta.id,
+        session_id = (
+            args[1]
+            if len(args) > 1
+            else interactive_session_pick(store, current=state.session_meta.id)
         )
         if not session_id:
             return True
@@ -240,11 +238,37 @@ def _handle_sessions(
             print_error(f'Session not found: {session_id}')
         return True
 
-    print_error(f'Unknown command: /sessions {" ".join(args)}')
-    print_info(
-        'Usage: /sessions [list] | /sessions set [id] | /sessions new '
-        '| /sessions delete [id]'
-    )
+    # /session (no args) — interactive picker to resume
+    if not subcommand:
+        session_id = interactive_session_pick(store, current=state.session_meta.id)
+        return _resume_session(session_id, state, store, deps)
+
+    print_error(f'Unknown: /session {" ".join(args)}')
+    print_info('Usage: /session [show | resume [id] | new | delete [id]]')
+    return True
+
+
+def _resume_session(
+    session_id: str | None,
+    state: ChatState,
+    store: JsonSessionStore,
+    deps: AgentDeps | None,
+) -> bool:
+    if not session_id:
+        return True
+    try:
+        data = store.load(session_id)
+    except FileNotFoundError:
+        print_error(f'Session not found: {session_id}')
+        return True
+    state.message_history = list(data.messages)
+    state.model = data.meta.model or state.model
+    state.mode = _parse_mode(data.meta.mode, state.mode)
+    state.session_meta = data.meta
+    state.rebuild_agent = True
+    if deps is not None:
+        _reset_repl_runtime_state(deps, state)
+    print_info(f'Resumed session {data.meta.id} ({data.meta.turn_count} turns)')
     return True
 
 
@@ -258,24 +282,26 @@ def _handle_memories(
     command: str,
     args: list[str],
     deps: AgentDeps | None,
-    memory_store: SQLiteMemoryStore | None,
+    memory_store: MemoryStore | None,
 ) -> bool:
     if deps is None or memory_store is None:
         print_error('Shared memory is unavailable in this context.')
         return True
 
-    subcommand = args[0] if args else 'list'
+    subcommand = args[0] if args else ''
     workspace_key = _workspace_key(deps.context)
-    log.debug('memories command: %s workspace=%s', subcommand, workspace_key)
+    log.debug('memory command: %s workspace=%s', subcommand, workspace_key)
 
-    if subcommand == 'list':
+    # /memory show — list table
+    if subcommand == 'show':
         print_memory_table(memory_store.list_memories(workspace_key=workspace_key, limit=20))
         return True
 
+    # /memory search <query>
     if subcommand == 'search':
-        query = command.removeprefix('/memories').strip().removeprefix('search').strip()
+        query = command.removeprefix('/memory').strip().removeprefix('search').strip()
         if not query:
-            print_error('Usage: /memories search <query>')
+            print_error('Usage: /memory search <query>')
             return True
         results = memory_store.search(
             query,
@@ -286,10 +312,11 @@ def _handle_memories(
         print_memory_search_results(results)
         return True
 
-    if subcommand == 'set':
-        text = command.removeprefix('/memories').strip().removeprefix('set').strip()
+    # /memory add <text>
+    if subcommand == 'add':
+        text = command.removeprefix('/memory').strip().removeprefix('add').strip()
         if not text:
-            print_error('Usage: /memories set <text>')
+            print_error('Usage: /memory add <text>')
             return True
         record, created = memory_store.save_memory(
             text,
@@ -303,28 +330,12 @@ def _handle_memories(
         print_info(f'{action} memory {record.id}')
         return True
 
-    if subcommand == 'get':
-        memory_id = args[1] if len(args) > 1 else interactive_memory_pick(
-            memory_store,
-            workspace_key=workspace_key,
-        )
-        if not memory_id:
-            return True
-        record = memory_store.get_memory(memory_id)
-        if record is None:
-            print_error(f'Memory not found: {memory_id}')
-            return True
-        console.print(f'id = {record.id}')
-        console.print(f'scope = {record.scope.value}')
-        console.print(f'kind = {record.kind.value}')
-        console.print(f'pinned = {record.pinned}')
-        console.print(f'text = {record.text}')
-        return True
-
+    # /memory delete [id]
     if subcommand == 'delete':
-        memory_id = args[1] if len(args) > 1 else interactive_memory_pick(
-            memory_store,
-            workspace_key=workspace_key,
+        memory_id = (
+            args[1]
+            if len(args) > 1
+            else interactive_memory_pick(memory_store, workspace_key=workspace_key)
         )
         if not memory_id:
             return True
@@ -334,35 +345,68 @@ def _handle_memories(
             print_error(f'Memory not found: {memory_id}')
         return True
 
-    print_error(f'Unknown command: /memories {" ".join(args)}')
-    print_info(
-        'Usage: /memories [list] | /memories search <query> | /memories set <text> '
-        '| /memories get [id] | /memories delete [id]'
-    )
+    # /memory <id> — show specific memory
+    if subcommand and subcommand not in {'show', 'search', 'add', 'delete'}:
+        record = memory_store.get_memory(subcommand)
+        if record is None:
+            print_error(f'Memory not found: {subcommand}')
+            return True
+        console.print(f'id = {record.id}')
+        console.print(f'scope = {record.scope.value}')
+        console.print(f'kind = {record.kind.value}')
+        console.print(f'pinned = {record.pinned}')
+        console.print(f'text = {record.text}')
+        return True
+
+    # /memory (no args) — list
+    print_memory_table(memory_store.list_memories(workspace_key=workspace_key, limit=20))
     return True
 
 
 def _handle_settings(args: list[str], state: ChatState, settings: FridaySettings) -> bool:
     effective = _effective_settings(settings, state)
-    subcommand = args[0] if args else 'list'
 
-    if subcommand == 'list':
+    # /setting show — list all
+    if not args or (args and args[0] == 'show'):
         _print_settings(effective)
         return True
 
-    if subcommand == 'get':
-        if len(args) < 2:
-            print_error('Usage: /settings get <key>')
-            return True
-        key = args[1]
+    arg = args[0]
+
+    # /setting <key>=<value> — update in session
+    if '=' in arg:
+        key, _, value = arg.partition('=')
         if key not in FridaySettings.model_fields:
             print_error(f'Unknown setting: {key}')
             return True
-        console.print(f'{key} = {getattr(effective, key)}')
+        # Apply to state where possible
+        if key == 'default_model':
+            state.model = value
+            state.rebuild_agent = True
+            print_info(f'{key} = {value}')
+        elif key == 'default_mode':
+            try:
+                state.mode = AgentMode(value)
+                state.rebuild_agent = True
+                print_info(f'{key} = {value}')
+            except ValueError:
+                print_error(f'Invalid mode: {value}')
+        elif key == 'approval_policy':
+            settings_copy = settings.model_copy(update={key: value})
+            # Update the live settings reference
+            setattr(settings, key, getattr(settings_copy, key))
+            print_info(f'{key} = {value}')
+        else:
+            print_error(f'Setting {key} cannot be changed at runtime')
         return True
 
-    print_error(f'Unknown command: /settings {" ".join(args)}')
-    print_info('Usage: /settings [list] | /settings get <key>')
+    # /setting <key> — show single value
+    if arg in FridaySettings.model_fields:
+        console.print(f'{arg} = {getattr(effective, arg)}')
+        return True
+
+    print_error(f'Unknown setting: {arg}')
+    print_info('Usage: /setting [show] | /setting <key> | /setting <key>=<value>')
     return True
 
 
@@ -372,7 +416,7 @@ def _handle_slash(
     settings: FridaySettings,
     store: JsonSessionStore,
     deps: AgentDeps | None = None,
-    memory_store: SQLiteMemoryStore | None = None,
+    memory_store: MemoryStore | None = None,
 ) -> bool:
     parts = command.strip().split()
     if not parts:
@@ -384,12 +428,6 @@ def _handle_slash(
     if cmd in ('/quit', '/exit'):
         raise EOFError
 
-    if cmd in LEGACY_COMMAND_SUGGESTIONS:
-        replacement = LEGACY_COMMAND_SUGGESTIONS[cmd]
-        print_error(f'`{cmd}` no longer exists.')
-        print_info(f'Use `{replacement}` instead.')
-        return True
-
     if cmd == '/help':
         _print_help()
         return True
@@ -397,19 +435,19 @@ def _handle_slash(
     if cmd == '/debug':
         return _handle_debug(args, state)
 
-    if cmd == '/models':
+    if cmd == '/model':
         return _handle_models(args, state, settings)
 
-    if cmd == '/modes':
+    if cmd == '/mode':
         return _handle_modes(args, state)
 
-    if cmd == '/sessions':
+    if cmd == '/session':
         return _handle_sessions(args, state, store, deps)
 
-    if cmd == '/memories':
+    if cmd == '/memory':
         return _handle_memories(command, args, deps, memory_store)
 
-    if cmd == '/settings':
+    if cmd == '/setting':
         return _handle_settings(args, state, settings)
 
     if cmd == '/clear':
@@ -506,8 +544,7 @@ def run_chat(
     console.print()
     console.print('[accent]Friday[/accent] [muted]v0.1.0[/muted]')
     console.print(
-        f'[muted]mode:[/muted] [info]{state.mode.value}[/info]  '
-        f'[muted]model:[/muted] {state.model}'
+        f'[muted]mode:[/muted] [info]{state.mode.value}[/info]  [muted]model:[/muted] {state.model}'
     )
     if resume_session:
         console.print(
@@ -525,6 +562,38 @@ def run_chat(
         state.model,
     )
 
+    # Reuse a single event loop for the entire session to avoid
+    # httpx/openai connection pool issues with asyncio.run() per turn.
+    loop = asyncio.new_event_loop()
+
+    try:
+        _chat_loop(
+            loop,
+            prompt_session,
+            store,
+            settings,
+            context,
+            deps,
+            memory_store,
+            state,
+            agent,
+        )
+    finally:
+        loop.close()
+
+
+def _chat_loop(
+    loop: asyncio.AbstractEventLoop,
+    prompt_session: PromptSession[str],
+    store: JsonSessionStore,
+    settings: FridaySettings,
+    context: WorkspaceContext,
+    deps: AgentDeps,
+    memory_store: MemoryStore | None,
+    state: ChatState,
+    agent: Agent[AgentDeps, Any],
+) -> None:
+    """Inner REPL loop — separated so the event loop lifetime is managed by the caller."""
     while True:
         try:
             user_input = prompt_session.prompt(
@@ -576,7 +645,7 @@ def run_chat(
                 if status is not None:
                     deps.before_approval = status.stop
                     deps.after_approval = status.start
-                executed = asyncio.run(
+                executed = loop.run_until_complete(
                     execute_agent(
                         agent,
                         deps=deps,

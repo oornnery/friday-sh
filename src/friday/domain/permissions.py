@@ -1,11 +1,49 @@
-"""Path containment and context reduction utilities."""
+"""Path containment, secret detection, and context reduction utilities."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 MAX_TOOL_OUTPUT = 4000
+
+# ── Secret detection ───────────────────────────────────────────
+
+_SECRET_PATTERNS: list[re.Pattern[str]] = [
+    # Keywords (en/pt)
+    re.compile(
+        r'\b(api[_ -]?key|token|secret|password|passwd|senha|chave|credential)\b',
+        re.IGNORECASE,
+    ),
+    # AWS access keys
+    re.compile(r'AKIA[0-9A-Z]{16}'),
+    # Bearer tokens
+    re.compile(r'Bearer\s+[a-zA-Z0-9_\-.]+', re.IGNORECASE),
+    # URLs with embedded credentials
+    re.compile(r'://[^/:@\s]+:[^/@\s]+@'),
+    # Long hex strings (generic tokens/hashes > 32 chars)
+    re.compile(r'[0-9a-f]{32,}', re.IGNORECASE),
+    # SSH/PGP key markers
+    re.compile(r'-----BEGIN\s+(RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'),
+    # GitHub/GitLab tokens
+    re.compile(r'(ghp|gho|ghu|ghs|ghr|glpat)[_-][a-zA-Z0-9]{16,}'),
+]
+
+
+def contains_secret(text: str) -> bool:
+    """Return True if *text* appears to contain a secret or credential."""
+    return any(pattern.search(text) for pattern in _SECRET_PATTERNS)
+
+
+def sanitize_for_prompt(text: str, limit: int = 200) -> str:
+    """Clip *text* and redact if it contains secrets."""
+    clipped = clip(text, limit)
+    if contains_secret(clipped):
+        return '[redacted — contains sensitive data]'
+    return clipped
+
+
 RECENT_WINDOW = 6
 RECENT_LIMIT = 900
 OLD_LIMIT = 180

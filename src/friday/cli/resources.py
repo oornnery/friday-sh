@@ -12,7 +12,7 @@ from friday.cli.output import console, print_error, print_info
 from friday.cli.picker import pick
 from friday.domain.models import AgentMode
 from friday.infra.config import FridaySettings
-from friday.infra.memory import MemoryRecord, MemorySearchResult, SQLiteMemoryStore
+from friday.infra.memory import MemoryRecord, MemorySearchResult, MemoryStore
 from friday.infra.sessions import JsonSessionStore, SessionMeta
 from friday.infra.store import ConfigFileStore
 
@@ -93,7 +93,7 @@ def interactive_session_pick(store: JsonSessionStore, current: str = '') -> str 
 
 
 def interactive_memory_pick(
-    store: SQLiteMemoryStore,
+    store: MemoryStore,
     *,
     workspace_key: str,
     current: str = '',
@@ -110,10 +110,7 @@ def interactive_memory_pick(
     choices = [
         MemoryChoice(
             id=record.id,
-            label=(
-                f'{record.id}  [{record.scope.value}/{record.kind.value}] '
-                f'{record.text}'
-            ),
+            label=(f'{record.id}  [{record.scope.value}/{record.kind.value}] {record.text}'),
         )
         for record in records
     ]

@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 __all__ = [
-    'LEGACY_COMMAND_SUGGESTIONS',
     'REPL_COMMANDS',
     'RESOURCE_COMMANDS',
     'ResourceCommand',
@@ -22,43 +21,32 @@ class ResourceCommand:
 
 
 RESOURCE_COMMANDS: tuple[ResourceCommand, ...] = (
-    ResourceCommand('models', 'List and select models', ('list', 'set')),
-    ResourceCommand('modes', 'List and select modes', ('list', 'set')),
+    ResourceCommand('model', 'Select or show models', ('show',)),
+    ResourceCommand('mode', 'Select or show modes', ('show',)),
     ResourceCommand(
-        'sessions',
-        'List and manage saved sessions',
-        ('list', 'set', 'delete', 'new'),
+        'session',
+        'Manage saved sessions',
+        ('show', 'resume', 'new', 'delete'),
     ),
-    ResourceCommand('settings', 'Read effective configuration', ('list', 'get')),
+    ResourceCommand('setting', 'Read or update settings', ('show',)),
     ResourceCommand(
-        'memories',
+        'memory',
         'Inspect and manage shared memory',
-        ('list', 'search', 'set', 'get', 'delete'),
+        ('show', 'search', 'add', 'delete'),
     ),
 )
 
 REPL_COMMANDS: dict[str, str] = {
     '/help': 'Show available commands',
-    '/debug': 'Toggle verbose logging and stack traces',
-    '/models': 'List or set models',
-    '/modes': 'List or set modes',
-    '/sessions': 'List, set, delete, or create sessions',
-    '/settings': 'Read settings',
-    '/memories': 'List, search, create, inspect, or delete memories',
+    '/model': 'Model picker (or /model show | /model <name>)',
+    '/mode': 'Mode picker (or /mode show | /mode <name>)',
+    '/session': 'Session picker (or /session show | resume | new | delete)',
+    '/setting': 'Show settings (or /setting <key> | /setting <key>=<value>)',
+    '/memory': 'List memories (or /memory show | search | add | delete)',
+    '/debug': 'Toggle debug (or /debug on | off | show)',
     '/clear': 'Clear conversation',
     '/quit': 'Exit Friday',
     '/exit': 'Exit Friday',
-}
-
-LEGACY_COMMAND_SUGGESTIONS: dict[str, str] = {
-    'session': 'sessions',
-    'model': 'models',
-    'mode': 'modes',
-    'config': 'settings',
-    '/session': '/sessions',
-    '/model': '/models',
-    '/mode': '/modes',
-    '/config': '/settings',
 }
 
 

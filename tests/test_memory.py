@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from friday.agent.deps import AgentDeps
-from friday.agent.shared_memory import load_relevant_shared_memory, record_completed_turn
+from friday.agent.memory import load_relevant_shared_memory, record_completed_turn
 from friday.domain.models import AgentMode, MemoryKind, MemoryScope
 from friday.infra.config import FridaySettings
 from friday.infra.memory import SQLiteMemoryStore
@@ -130,11 +130,13 @@ def test_sticky_profile_memory_is_injected_cross_session(tmp_path: Path) -> None
     settings = _settings(tmp_path)
     deps = _deps(tmp_path, settings, session_id='session-1')
 
-    record_completed_turn(
-        deps,
-        user_prompt='meu nome e fabio',
-        reply_markdown='Prazer, Fabio.',
-        record_chat_chunk=True,
+    # Agent saves memory explicitly via save_memory tool (no regex auto-promotion)
+    deps.memory_store.save_memory(
+        'User name is Fabio.',
+        kind=MemoryKind.PROFILE,
+        scope=MemoryScope.GLOBAL,
+        workspace_key=tmp_path.as_posix(),
+        pinned=True,
     )
 
     other_session = _deps(tmp_path, settings, session_id='session-2')

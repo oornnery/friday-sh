@@ -16,7 +16,7 @@ def build_response_panel(text: str) -> Panel:
     """Build the styled panel used for visible agent responses."""
     return Panel(
         Markdown(text),
-        box=box.ROUNDED,
+        box=box.MARKDOWN,
         border_style='response.border',
         style='response',
         padding=(0, 1),
@@ -25,7 +25,9 @@ def build_response_panel(text: str) -> Panel:
 
 def print_markdown(text: str) -> None:
     """Render markdown text to the console."""
+    console.print()
     console.print(build_response_panel(text))
+    console.print()
 
 
 def print_info(text: str) -> None:

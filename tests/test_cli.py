@@ -36,7 +36,7 @@ def test_help() -> None:
 def test_settings_default_action_lists_effective_settings(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(app_module, '_get_settings', lambda: _settings(tmp_path))
 
-    result = runner.invoke(app, ['settings'])
+    result = runner.invoke(app, ['setting'])
 
     assert result.exit_code == 0
     assert 'default_model' in result.output
@@ -51,18 +51,15 @@ def test_models_default_action_calls_list(monkeypatch, tmp_path: Path) -> None:
         lambda settings, provider=None: calls.append(provider),
     )
 
-    result = runner.invoke(app, ['models'])
+    result = runner.invoke(app, ['model'])
 
     assert result.exit_code == 0
     assert calls == [None]
 
 
-def test_legacy_config_command_fails_with_suggestion() -> None:
-    result = runner.invoke(app, ['config'])
-
-    assert result.exit_code == 1
-    assert 'no longer exists' in result.output
-    assert 'friday settings' in result.output
+def test_unknown_command_shows_help() -> None:
+    result = runner.invoke(app, ['nonexistent'])
+    assert result.exit_code != 0
 
 
 def test_sessions_default_action_lists_saved_sessions(monkeypatch, tmp_path: Path) -> None:
@@ -83,7 +80,7 @@ def test_sessions_default_action_lists_saved_sessions(monkeypatch, tmp_path: Pat
     )
     monkeypatch.setattr(app_module, '_get_settings', lambda: settings)
 
-    result = runner.invoke(app, ['sessions'])
+    result = runner.invoke(app, ['session'])
 
     assert result.exit_code == 0
     assert 'abc123' in result.output
@@ -99,7 +96,7 @@ def test_sessions_set_invokes_chat_with_session(monkeypatch, tmp_path: Path) -> 
         lambda session_id, settings: called.append(session_id),
     )
 
-    result = runner.invoke(app, ['sessions', 'set', 'abc123'])
+    result = runner.invoke(app, ['session', 'resume', 'abc123'])
 
     assert result.exit_code == 0
     assert called == ['abc123']
@@ -114,8 +111,8 @@ def test_memories_set_and_list(monkeypatch, tmp_path: Path) -> None:
         lambda: SimpleNamespace(repo_root=tmp_path),
     )
 
-    set_result = runner.invoke(app, ['memories', 'set', 'remember Fabio'])
-    list_result = runner.invoke(app, ['memories'])
+    set_result = runner.invoke(app, ['memory', 'add', 'remember Fabio'])
+    list_result = runner.invoke(app, ['memory'])
 
     assert set_result.exit_code == 0
     assert 'Saved memory' in set_result.output
@@ -146,7 +143,7 @@ def test_memories_search_includes_chat_and_memory_hits(monkeypatch, tmp_path: Pa
         assistant_reply='We show it at the end of the answer.',
     )
 
-    result = runner.invoke(app, ['memories', 'search', 'Fabio'])
+    result = runner.invoke(app, ['memory', 'search', 'Fabio'])
 
     assert result.exit_code == 0
     assert 'memory' in result.output

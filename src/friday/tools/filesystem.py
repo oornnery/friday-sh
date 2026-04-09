@@ -1,4 +1,4 @@
-"""Filesystem tools — read, write, patch, list, search."""
+"""Filesystem tools — read, write, patch, list, search with input validation."""
 
 from __future__ import annotations
 
@@ -9,12 +9,20 @@ from pydantic_ai import RunContext
 
 from friday.agent.deps import AgentDeps
 from friday.domain.permissions import clip, safe_path
+from friday.domain.validation import (
+    validate_content,
+    validate_line_range,
+    validate_path,
+    validate_pattern,
+)
 
 log = logging.getLogger(__name__)
 
 
 async def read_file(ctx: RunContext[AgentDeps], path: str, start: int = 1, end: int = 200) -> str:
     """Read a UTF-8 file by line range."""
+    validate_path(path)
+    start, end = validate_line_range(start, end)
     log.debug('tool read_file: path=%s start=%s end=%s', path, start, end)
     resolved = safe_path(ctx.deps.workspace_root, path)
     ctx.deps.memory.remember(ctx.deps.memory.files, path, 8)
@@ -25,6 +33,8 @@ async def read_file(ctx: RunContext[AgentDeps], path: str, start: int = 1, end: 
 
 async def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str:
     """Write content to a file, creating parent directories as needed."""
+    validate_path(path)
+    validate_content(content)
     log.debug('tool write_file: path=%s chars=%s', path, len(content))
     resolved = safe_path(ctx.deps.workspace_root, path)
     resolved.parent.mkdir(parents=True, exist_ok=True)
@@ -35,6 +45,7 @@ async def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str
 
 async def patch_file(ctx: RunContext[AgentDeps], path: str, old: str, new: str) -> str:
     """Replace an exact string in a file. Fails if old is not found or not unique."""
+    validate_path(path)
     log.debug('tool patch_file: path=%s old_chars=%s new_chars=%s', path, len(old), len(new))
     resolved = safe_path(ctx.deps.workspace_root, path)
     text = resolved.read_text(encoding='utf-8', errors='replace')
@@ -51,6 +62,8 @@ async def patch_file(ctx: RunContext[AgentDeps], path: str, old: str, new: str) 
 
 async def list_files(ctx: RunContext[AgentDeps], path: str = '.', pattern: str = '*') -> str:
     """List files matching a glob pattern relative to workspace root."""
+    validate_path(path)
+    validate_pattern(pattern)
     log.debug('tool list_files: path=%s pattern=%s', path, pattern)
     resolved = safe_path(ctx.deps.workspace_root, path)
     matches = sorted(resolved.glob(pattern))
@@ -62,6 +75,10 @@ async def list_files(ctx: RunContext[AgentDeps], path: str = '.', pattern: str =
 
 async def search(ctx: RunContext[AgentDeps], pattern: str, path: str = '.', glob: str = '') -> str:
     """Search file contents using ripgrep (falls back to grep)."""
+    validate_path(path)
+    validate_pattern(pattern)
+    if glob:
+        validate_pattern(glob)
     log.debug('tool search: pattern=%s path=%s glob=%s', pattern, path, glob)
     search_path = safe_path(ctx.deps.workspace_root, path)
     ctx.deps.memory.remember(ctx.deps.memory.files, str(path), 8)
