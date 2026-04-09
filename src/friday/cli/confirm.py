@@ -52,11 +52,11 @@ def _confirm_selector() -> bool:
     selected = 0  # 0=Yes, 1=No
     _G = '\x1b[32m'  # green
     _D = '\x1b[90m'  # dim
-    _R = '\x1b[0m'   # reset
+    _R = '\x1b[0m'  # reset
     _HIDE = '\x1b[?25l'  # hide cursor
     _SHOW = '\x1b[?25h'  # show cursor
-    _CLR = '\x1b[J'       # clear from cursor to end
-    _UP2 = '\x1b[2A'      # move up 2 lines
+    _CLR = '\x1b[J'  # clear from cursor to end
+    _UP2 = '\x1b[2A'  # move up 2 lines
 
     out = sys.stdout
 
