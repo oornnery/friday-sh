@@ -75,6 +75,7 @@ class FridaySettings(BaseSettings):
     session_dir: Path = Path('~/.local/share/friday/sessions')
     config_dir: Path = Path('~/.config/friday')
     memory_db_path: Path = Path('memory.db')
+    log_file: Path = Path('~/.local/share/friday/friday.log')
 
     # Memory
     memory_top_k: int = 6
@@ -88,8 +89,10 @@ class FridaySettings(BaseSettings):
         self.session_dir = self.session_dir.expanduser()
         self.config_dir = self.config_dir.expanduser()
         self.memory_db_path = self.memory_db_path.expanduser()
+        self.log_file = self.log_file.expanduser()
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
         if not self.memory_db_path.is_absolute():
             self.memory_db_path = self.config_dir / self.memory_db_path
         self.memory_db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.log_file.parent.mkdir(parents=True, exist_ok=True)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 
 from pydantic_ai.exceptions import UserError
@@ -12,10 +13,13 @@ from friday.agent.context import WorkspaceContext
 from friday.agent.core import create_agent, execute_agent
 from friday.agent.deps import AgentDeps
 from friday.agent.stats import format_turn_summary
+from friday.cli.debug import setup_file_logging
 from friday.cli.output import console, print_error, print_info, print_markdown, print_run_summary
 from friday.domain.models import AgentMode
 from friday.infra.config import FridaySettings
 from friday.infra.memory import SQLiteMemoryStore
+
+log = logging.getLogger(__name__)
 
 
 def run_ask(
@@ -31,7 +35,14 @@ def run_ask(
         stdin_content = sys.stdin.read().strip()
         if stdin_content:
             question = f'{question}\n\n```\n{stdin_content}\n```'
+        # Reopen /dev/tty so approval prompts work after pipe is consumed
+        try:
+            sys.stdin = open('/dev/tty')
+            stdin_is_tty = True
+        except OSError:
+            pass
 
+    setup_file_logging(settings.log_file)
     selected_mode = mode or settings.default_mode
     context = WorkspaceContext.discover()
     deps = AgentDeps(
@@ -50,6 +61,7 @@ def run_ask(
             if status is not None:
                 deps.before_approval = status.stop
                 deps.after_approval = status.start
+            deps.turn_stats.start_timer()
             executed = asyncio.run(
                 execute_agent(
                     agent,
@@ -58,6 +70,7 @@ def run_ask(
                     requested_model=settings.default_model,
                 )
             )
+            deps.turn_stats.stop_timer()
         print_markdown(executed.reply.markdown)
         print_run_summary(format_turn_summary(deps.turn_stats))
     except UserError as exc:
@@ -68,3 +81,6 @@ def run_ask(
         )
     except KeyboardInterrupt:
         print_error('\nInterrupted.')
+    except Exception as exc:
+        log.exception('unexpected error during ask')
+        print_error(f'Error: {exc}')

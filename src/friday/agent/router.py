@@ -52,11 +52,17 @@ async def delegate_debug(ctx: RunContext[AgentDeps], task: str) -> AgentReply:
     return await _run_sub_agent(ctx, AgentMode.DEBUG, task)
 
 
+async def delegate_shell(ctx: RunContext[AgentDeps], task: str) -> AgentReply:
+    """Delegate a task that requires running shell commands (git, ls, pytest, etc.)."""
+    return await _run_sub_agent(ctx, AgentMode.SHELL, task)
+
+
 DELEGATE_TOOLS = {
     'delegate_code': delegate_code,
     'delegate_reader': delegate_reader,
     'delegate_writer': delegate_writer,
     'delegate_debug': delegate_debug,
+    'delegate_shell': delegate_shell,
 }
 
 

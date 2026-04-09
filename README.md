@@ -143,12 +143,42 @@ The `/model` and `/mode` pickers support **search** -- type to filter:
 
 ### ZSH Keybindings
 
-| Key                   | Action                                  |
-| --------------------- | --------------------------------------- |
-| `f "question"`        | Ask Friday from anywhere                |
-| `Ctrl+F`              | Ask about current buffer / last command |
-| `Ctrl+G`              | Fuzzy session picker (requires fzf)     |
-| `friday-select-model` | Interactive model picker with fzf       |
+| Key                   | Action                                                  |
+| --------------------- | ------------------------------------------------------- |
+| `f "question"`        | Ask Friday from anywhere                                |
+| `Ctrl+F`              | Compose `f` command from current buffer or last command |
+| `Ctrl+G`              | Fuzzy session picker (requires fzf)                     |
+| `friday-select-model` | Interactive model picker with fzf                       |
+
+**Piping input:**
+
+```bash
+git status | f                        # Friday sees the output
+git diff | f "review this"            # Pipe + question combined
+cat error.log | f "what went wrong?"  # Analyze any output
+```
+
+**Ctrl+F in action:**
+
+```text
+# You type a command that fails:
+$ whoemi
+zsh: command not found: whoemi
+
+# Press Ctrl+F — Friday composes the question for you:
+$ f "last command: whoemi (exit 127)"
+# Press Enter to ask
+```
+
+**Ctrl+G session picker:**
+
+```text
+friday session>
+  3/3
+  20260409-162219-69b3a6  2026-04-09 16:22  2t  hello
+  20260409-155731-316ce7  2026-04-09 15:57  3t  explain the router module
+  20260409-154629-9355d4  2026-04-09 15:46  1t  fix the failing test
+```
 
 ### Resource Commands (CLI)
 
@@ -222,12 +252,20 @@ Risky tools (`write_file`, `patch_file`, `run_shell`) require user
 confirmation before executing:
 
 ```text
-  +-- Confirm ----------------------+
-  | run_shell: Execute shell command |
-  |                                  |
-  | rm -rf node_modules && npm i     |
-  +----------------------------------+
-  Allow? [y/N]
+╭── Confirm ─────────────────────────────╮
+│ run_shell: execute deferred tool call  │
+│                                        │
+│ { "command": "rm -rf node_modules" }   │
+╰────────────────────────────────────────╯
+Allow?  y / N
+```
+
+In non-interactive contexts (CLI `friday ask`), the picker style is used:
+
+```text
+  Allow?
+> Yes
+  No
 ```
 
 Configurable via `approval_policy`:

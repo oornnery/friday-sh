@@ -9,7 +9,14 @@
 # ─── Shorthand ────────────────────────────────────────────────────
 
 f() {
-    friday ask "$*"
+    if [[ ! -t 0 ]]; then
+        # stdin is a pipe — prepend it to the question
+        local piped
+        piped=$(cat)
+        friday ask "${piped}${*:+$'\n\n'$*}"
+    else
+        friday ask "$*"
+    fi
 }
 
 # ─── Shell state hooks ────────────────────────────────────────────
@@ -34,26 +41,19 @@ fi
 # ─── Ctrl+F: Ask Friday about current buffer ─────────────────────
 
 __friday_ask_widget() {
-    local current_buffer="$BUFFER"
     local last_cmd="${FRIDAY_LAST_CMD:-}"
     local last_exit="${FRIDAY_LAST_EXIT:-0}"
+    local current_buffer="$BUFFER"
 
-    local context=""
-    [[ -n "$last_cmd" ]] && context="Last command: $last_cmd (exit $last_exit)\n"
-    [[ -n "$current_buffer" ]] && context="${context}Current line: $current_buffer\n"
-
-    if [[ -z "$context" ]]; then
+    if [[ -n "$current_buffer" ]]; then
+        BUFFER="f \"$current_buffer\""
+    elif [[ -n "$last_cmd" ]]; then
+        BUFFER="f \"last command: $last_cmd (exit $last_exit)\""
+    else
         zle -M "friday: nothing to ask about"
         return
     fi
-
-    local result
-    result=$(echo -e "$context" | friday ask "What should I do?" --mode code 2>/dev/null)
-
-    if [[ -n "$result" ]]; then
-        BUFFER="$result"
-        CURSOR=${#BUFFER}
-    fi
+    CURSOR=${#BUFFER}
     zle redisplay
 }
 zle -N __friday_ask_widget
@@ -67,10 +67,20 @@ __friday_fzf_sessions() {
         zle -M "friday: fzf not installed"
         return
     fi
+    if ! command -v friday &>/dev/null; then
+        zle -M "friday: friday not in PATH"
+        return
+    fi
+
+    local sessions
+    sessions=$(friday session show --plain 2>/dev/null)
+    if [[ -z "$sessions" ]]; then
+        zle -M "friday: no saved sessions"
+        return
+    fi
 
     local selected
-    selected=$(friday session show --plain 2>/dev/null | fzf --height=40% --reverse --prompt="friday session> ")
-
+    selected=$(echo "$sessions" | fzf --height=40% --reverse --prompt="friday session> " --tabstop=4 | awk '{print $1}')
     if [[ -n "$selected" ]]; then
         BUFFER="friday session resume $selected"
         CURSOR=${#BUFFER}

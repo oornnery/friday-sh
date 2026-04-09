@@ -4,26 +4,64 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from rich.logging import RichHandler
 from rich.traceback import Traceback
 
 from friday.cli.output import console
 
-__all__ = ['format_debug_status', 'print_debug_traceback', 'set_debug_logging']
+__all__ = [
+    'format_debug_status',
+    'print_debug_traceback',
+    'set_debug_logging',
+    'setup_file_logging',
+]
 
 _LOGGER_NAMES = ('friday', 'pydantic_ai', 'openai', 'httpx', 'httpcore')
+
+_FILE_LOG_FMT = '%(asctime)s %(levelname)-8s %(name)s: %(message)s'
+_FILE_LOG_DATEFMT = '%Y-%m-%d %H:%M:%S'
 
 
 @dataclass(slots=True)
 class _DebugState:
     enabled: bool = False
     handler: logging.Handler | None = None
+    file_handler: logging.Handler | None = None
     root_level: int = logging.WARNING
     logger_levels: dict[str, int] = field(default_factory=dict)
 
 
 _STATE = _DebugState()
+
+
+def setup_file_logging(log_file: Path) -> None:
+    """Always-on file logging. Independent of /debug toggle.
+
+    Writes DEBUG-level logs for friday.* and INFO for third-party
+    loggers to a rotating file (5MB, 3 backups).
+    """
+    if _STATE.file_handler is not None:
+        return
+
+    handler = RotatingFileHandler(
+        log_file,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding='utf-8',
+    )
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter(_FILE_LOG_FMT, datefmt=_FILE_LOG_DATEFMT))
+
+    # friday.* gets DEBUG, everything else stays at their current level
+    friday_logger = logging.getLogger('friday')
+    friday_logger.addHandler(handler)
+    friday_logger.setLevel(logging.DEBUG)
+
+    _STATE.file_handler = handler
+    logging.getLogger('friday.cli.debug').debug('file logging started: %s', log_file)
 
 
 def set_debug_logging(enabled: bool) -> bool:

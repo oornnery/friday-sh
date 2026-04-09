@@ -306,8 +306,10 @@ def _sessions_list(*, plain: bool) -> None:
     store = JsonSessionStore(settings.session_dir)
     sessions = store.list_sessions(limit=20)
     if plain:
-        for session in sessions:
-            console.print(session.id)
+        for s in sessions:
+            msg = s.last_user_message[:40].replace('\n', ' ') if s.last_user_message else ''
+            ts = s.created_at[:16].replace('T', ' ') if s.created_at else ''
+            console.print(f'{s.id}\t{ts}\t{s.turn_count}t\t{msg}')
         return
     print_session_table(sessions)
 

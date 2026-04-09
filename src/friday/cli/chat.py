@@ -22,7 +22,12 @@ from friday.agent.deps import AgentDeps
 from friday.agent.stats import format_turn_summary
 from friday.cli.catalog import REPL_COMMANDS
 from friday.cli.completer import FridayCompleter
-from friday.cli.debug import format_debug_status, print_debug_traceback, set_debug_logging
+from friday.cli.debug import (
+    format_debug_status,
+    print_debug_traceback,
+    set_debug_logging,
+    setup_file_logging,
+)
 from friday.cli.models import list_models
 from friday.cli.output import console, print_error, print_info, print_markdown, print_run_summary
 from friday.cli.resources import (
@@ -504,6 +509,7 @@ def run_chat(
     resume_session: SessionData | None = None,
 ) -> None:
     """Start the interactive REPL, optionally resuming a saved session."""
+    setup_file_logging(settings.log_file)
     history_path = settings.config_dir.expanduser() / 'repl_history'
     history_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -645,6 +651,7 @@ def _chat_loop(
                 if status is not None:
                     deps.before_approval = status.stop
                     deps.after_approval = status.start
+                deps.turn_stats.start_timer()
                 executed = loop.run_until_complete(
                     execute_agent(
                         agent,
@@ -654,6 +661,7 @@ def _chat_loop(
                         requested_model=state.model,
                     )
                 )
+                deps.turn_stats.stop_timer()
             print_markdown(executed.reply.markdown)
             print_run_summary(format_turn_summary(deps.turn_stats))
             state.message_history = executed.messages

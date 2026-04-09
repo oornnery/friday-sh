@@ -21,6 +21,7 @@ class AgentMode(StrEnum):
     READER = 'reader'
     WRITE = 'write'
     DEBUG = 'debug'
+    SHELL = 'shell'
 
 
 SPECIALIST_MODES: tuple[AgentMode, ...] = (
@@ -28,6 +29,7 @@ SPECIALIST_MODES: tuple[AgentMode, ...] = (
     AgentMode.READER,
     AgentMode.WRITE,
     AgentMode.DEBUG,
+    AgentMode.SHELL,
 )
 
 

@@ -240,7 +240,8 @@ def _auto_instructions(
             '- Use action="delegate" and fill delegate_mode + task when a specialist is needed.\n'
             '- Prefer respond for greetings, conversation, names, preferences, simple facts, '
             'and anything that does not require specialist work.\n'
-            '- Prefer delegate only for coding, debugging, documentation, or deep code reading.\n'
+            '- Prefer delegate for shell commands, coding, debugging, '\
+            'documentation, or deep code reading.\n'
             '- Treat Relevant Shared Memory as trusted context for stable user and project facts.\n'
             '- If Relevant Shared Memory already answers the question, respond directly instead of '
             'asking the user to repeat it.\n'

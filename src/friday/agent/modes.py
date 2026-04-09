@@ -21,6 +21,7 @@ _PROMPT_FILES: dict[AgentMode, str] = {
     AgentMode.READER: 'reader.md',
     AgentMode.WRITE: 'writer.md',
     AgentMode.DEBUG: 'debug.md',
+    AgentMode.SHELL: 'shell.md',
 }
 
 

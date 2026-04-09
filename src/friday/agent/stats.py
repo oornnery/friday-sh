@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,8 +22,16 @@ class TurnStats:
     cost_usd: float = 0.0
     cost_known: bool = True
     run_count: int = 0
+    elapsed_s: float = 0.0
     _last_usage_ref: RunUsage | None = None
     _last_usage_snapshot: RunUsage = field(default_factory=RunUsage)
+    _started_at: float = field(default_factory=time.monotonic)
+
+    def start_timer(self) -> None:
+        self._started_at = time.monotonic()
+
+    def stop_timer(self) -> None:
+        self.elapsed_s = time.monotonic() - self._started_at
 
     def reset(self) -> None:
         """Clear all stats before a new top-level run starts."""
@@ -31,8 +40,10 @@ class TurnStats:
         self.cost_usd = 0.0
         self.cost_known = True
         self.run_count = 0
+        self.elapsed_s = 0.0
         self._last_usage_ref = None
         self._last_usage_snapshot = RunUsage()
+        self._started_at = time.monotonic()
 
 
 def record_turn_result(stats: TurnStats, result: Any, requested_model: str = '') -> None:
@@ -83,7 +94,9 @@ def format_turn_summary(stats: TurnStats) -> str:
         token_parts.append(f'cache {usage.cache_read_tokens} read/{usage.cache_write_tokens} write')
 
     cost = f'${stats.cost_usd:.6f}' if stats.run_count and stats.cost_known else 'n/d'
-    return f'{model_label}: {models}  tokens: {", ".join(token_parts)}  cost: {cost}'
+    elapsed = f'{stats.elapsed_s:.1f}s' if stats.elapsed_s else ''
+    suffix = f'  time: {elapsed}' if elapsed else ''
+    return f'{model_label}: {models}  tokens: {", ".join(token_parts)}  cost: {cost}{suffix}'
 
 
 def _extract_model_label(result: Any, requested_model: str) -> str:

@@ -195,6 +195,7 @@ class InteractivePicker:
             full_screen=False,
             style=PT_STYLE,
         )
+
         app.run()
         return self.result
 
